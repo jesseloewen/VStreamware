@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Created by <a href="https://jesseloewe.com">jesseloewe.com</a>
+  Created by <a href="https://jesseloewen.com">jesseloewen.com</a>
 </p>
 
 ## What This App Does
@@ -295,4 +295,4 @@ app/
 
 ## Website
 
-- https://jesseloewe.com
+- https://jesseloewen.com
