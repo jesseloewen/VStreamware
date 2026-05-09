@@ -1,0 +1,110 @@
+<aside class="side-panel side-left" id="saved-panel">
+    <section class="panel-shell">
+        <h2 class="panel-title">Saved Channels</h2>
+        <div class="panel-body">
+            <form action="{{ url_for('dashboard.add_channel') }}" method="post" class="row-form start-only">
+                <input type="text" name="channel" placeholder="add channel" required>
+                <button type="submit">Add</button>
+            </form>
+
+            {% if saved_channels %}
+                <div class="saved-sort-row">
+                    <label class="saved-sort-label" for="saved-channel-sort">Sort</label>
+                    <select id="saved-channel-sort" class="saved-sort-select" aria-label="Sort saved channels">
+                        <option value="recent" selected>Recent Activity</option>
+                        <option value="name">Name (A-Z)</option>
+                    </select>
+                </div>
+                <div class="saved-list">
+                    {% for item in saved_channels %}
+                        <article
+                            class="saved-item"
+                            data-channel-name="{{ item.name | lower }}"
+                            data-is-recording="{{ 1 if item.is_recording else 0 }}"
+                            data-sort-priority="{{ item.sort_priority if item.sort_priority is not none else 2 }}"
+                            data-last-activity="{{ item.last_activity_unix if item.last_activity_unix is not none else 0 }}"
+                        >
+                            <div class="saved-header">
+                                <strong class="item-name">{{ item.name }}</strong>
+                                <div class="status-group">
+                                    {% if item.live_state == 'live' %}
+                                        <span class="badge live">Live</span>
+                                    {% elif item.live_state == 'checking' %}
+                                        <span class="badge neutral">Checking...</span>
+                                    {% else %}
+                                        <span class="badge offline">Offline</span>
+                                    {% endif %}
+                                    {% if item.is_recording %}
+                                        <span class="badge recording">Recording</span>
+                                    {% else %}
+                                        <span class="badge neutral">Idle</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% if item.live_state == 'live' and item.stream_title %}
+                                <p class="muted">Title: {{ item.stream_title }}</p>
+                            {% endif %}
+                            <div class="saved-controls">
+                                <div class="saved-toggle-group">
+                                <form action="{{ url_for('dashboard.set_channel_auto_recording') }}" method="post" class="saved-control-row">
+                                    <input type="hidden" name="channel" value="{{ item.name }}">
+                                    <div class="saved-control-text">
+                                        <span class="saved-control-title">Auto Record Stream</span>
+                                    </div>
+                                    <label class="toggle-switch" aria-label="Auto recording for {{ item.name }}">
+                                        <input
+                                            type="checkbox"
+                                            name="enabled"
+                                            value="true"
+                                            {% if item.auto_record %}checked{% endif %}
+                                            onchange="this.form.submit()"
+                                        >
+                                        <span class="toggle-slider" aria-hidden="true"></span>
+                                        <span class="toggle-label">{{ 'ON' if item.auto_record else 'OFF' }}</span>
+                                    </label>
+                                </form>
+                                <form action="{{ url_for('dashboard.set_channel_chat_recording') }}" method="post" class="saved-control-row">
+                                    <input type="hidden" name="channel" value="{{ item.name }}">
+                                    <div class="saved-control-text">
+                                        <span class="saved-control-title">Capture Chat Replay</span>
+                                    </div>
+                                    <label class="toggle-switch" aria-label="Chat recording for {{ item.name }}">
+                                        <input
+                                            type="checkbox"
+                                            name="enabled"
+                                            value="true"
+                                            {% if item.chat_record %}checked{% endif %}
+                                            onchange="this.form.submit()"
+                                        >
+                                        <span class="toggle-slider" aria-hidden="true"></span>
+                                        <span class="toggle-label">Chat {{ 'ON' if item.chat_record else 'OFF' }}</span>
+                                    </label>
+                                </form>
+                                </div>
+                                <div class="saved-action-group">
+                                {% if item.is_recording %}
+                                    <form action="{{ url_for('dashboard.stop_recording') }}" method="post">
+                                        <input type="hidden" name="channel" value="{{ item.name }}">
+                                        <button type="submit" class="secondary">Stop Now</button>
+                                    </form>
+                                {% else %}
+                                    <form action="{{ url_for('dashboard.start_recording') }}" method="post">
+                                        <input type="hidden" name="channel" value="{{ item.name }}">
+                                        <button type="submit">Start Now</button>
+                                    </form>
+                                {% endif %}
+                                <form action="{{ url_for('dashboard.remove_channel') }}" method="post">
+                                    <input type="hidden" name="channel" value="{{ item.name }}">
+                                    <button type="submit" class="danger">Remove</button>
+                                </form>
+                                </div>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p>No saved channels yet.</p>
+            {% endif %}
+        </div>
+    </section>
+</aside>

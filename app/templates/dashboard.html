@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#141414">
+    <meta name="application-name" content="VStreamware">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="VStreamware">
+    <title>VStreamware</title>
+    <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16x16.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <main class="container">
+        <header class="page-header browser-header">
+            <h1 class="app-title">
+                <a class="app-title-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
+                    <img class="app-title-icon" src="{{ url_for('static', filename='icons/icon-64.png') }}" alt="VStreamware icon">
+                    <span>VStreamware</span>
+                </a>
+            </h1>
+            <div class="header-actions">
+                <a class="button-link" href="{{ url_for('dashboard.index') }}">Home</a>
+                <form action="{{ url_for('dashboard.clear_cache') }}" method="post" class="header-action-form" onsubmit="return window.confirm('Clear all cached thumbnails and transcoded videos?');">
+                    <button type="submit" class="button-link button-link-danger">Clear Cache</button>
+                </form>
+            </div>
+            <p>Twitch recording dashboard with saved channels and per-channel auto recording.</p>
+        </header>
+
+        <div class="mobile-panel-controls" aria-label="Panel controls">
+            {% include 'partials/saved_panel_toggle_button.html' %}
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <section class="messages">
+                    {% for category, message in messages %}
+                        <div class="message {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        <div class="browser-layout">
+            {% include 'partials/saved_channels_panel.html' %}
+
+            <section class="main-column">
+                <section class="card">
+                    <h2>Auto Monitor</h2>
+                    <p>Monitor status: <strong>{{ 'running' if auto_status.running else 'stopped' }}</strong></p>
+                    <p>Auto-enabled channels: <strong>{{ auto_status.enabled_channels }}/{{ auto_status.total_channels }}</strong></p>
+                    <p>Poll interval: <strong>{{ auto_status.poll_seconds }}s</strong></p>
+                    <p>Last status refresh: <strong class="utc-datetime" data-utc="{{ auto_status.last_refresh_at if auto_status.last_refresh_at else '' }}">{{ auto_status.last_refresh_at if auto_status.last_refresh_at else 'pending' }}</strong></p>
+                    <p class="muted">Only channels with Auto set to ON are eligible for automatic recording.</p>
+                    <p class="muted">Live status checks run in the background so page loads are not blocked.</p>
+                    <p class="muted sync-status" id="live-sync-status">Live sync connected.</p>
+                </section>
+
+                <section class="card">
+                    <h2>Display Timezone</h2>
+                    <p class="muted">Backend timestamps are stored in UTC. Choose how times are rendered in the UI.</p>
+                    <form action="{{ url_for('dashboard.set_display_timezone') }}" method="post" class="row-form start-only">
+                        <select id="display-timezone" name="display_timezone">
+                            <option value="auto" {% if display_timezone == 'auto' %}selected{% endif %}>Auto (browser timezone)</option>
+                            <option value="UTC" {% if display_timezone == 'UTC' %}selected{% endif %}>UTC</option>
+                            <option value="America/New_York" {% if display_timezone == 'America/New_York' %}selected{% endif %}>America/New_York</option>
+                            <option value="America/Chicago" {% if display_timezone == 'America/Chicago' %}selected{% endif %}>America/Chicago</option>
+                            <option value="America/Denver" {% if display_timezone == 'America/Denver' %}selected{% endif %}>America/Denver</option>
+                            <option value="America/Los_Angeles" {% if display_timezone == 'America/Los_Angeles' %}selected{% endif %}>America/Los_Angeles</option>
+                            <option value="Europe/London" {% if display_timezone == 'Europe/London' %}selected{% endif %}>Europe/London</option>
+                            <option value="Europe/Berlin" {% if display_timezone == 'Europe/Berlin' %}selected{% endif %}>Europe/Berlin</option>
+                            <option value="Asia/Tokyo" {% if display_timezone == 'Asia/Tokyo' %}selected{% endif %}>Asia/Tokyo</option>
+                        </select>
+                        <button type="submit" class="secondary">Save</button>
+                    </form>
+                </section>
+
+                <section class="card">
+                    <h2>Pushover Notifications</h2>
+                    {% if pushover_configured %}
+                        <p class="muted">Pushover is configured from environment variables.</p>
+                    {% else %}
+                        <p class="muted">Pushover is not configured. Set PUSHOVER_APP_TOKEN and PUSHOVER_USER_KEY to enable delivery.</p>
+                    {% endif %}
+
+                    <form action="{{ url_for('dashboard.test_notifications') }}" method="post" class="notification-test-form">
+                        <button type="submit">Send Test Notification</button>
+                    </form>
+
+                    {% if saved_channels %}
+                        <div class="notification-list">
+                            {% for item in saved_channels %}
+                                <article class="notification-item">
+                                    <form action="{{ url_for('dashboard.set_channel_notifications') }}" method="post" class="notification-form">
+                                        <input type="hidden" name="channel" value="{{ item.name }}">
+                                        <strong class="notification-channel">{{ item.name }}</strong>
+
+                                        <label class="notification-check">
+                                            <input type="checkbox" name="stream_live" value="true" {% if item.notifications.stream_live %}checked{% endif %}>
+                                            Stream Live
+                                        </label>
+
+                                        <label class="notification-check">
+                                            <input type="checkbox" name="stream_end" value="true" {% if item.notifications.stream_end %}checked{% endif %}>
+                                            Stream End
+                                        </label>
+
+                                        <label class="notification-check">
+                                            <input type="checkbox" name="recording_started" value="true" {% if item.notifications.recording_started %}checked{% endif %}>
+                                            Recording Start
+                                        </label>
+
+                                        <label class="notification-check">
+                                            <input type="checkbox" name="recording_stopped" value="true" {% if item.notifications.recording_stopped %}checked{% endif %}>
+                                            Recording Stop
+                                        </label>
+
+                                        <button type="submit" class="secondary">Save</button>
+                                    </form>
+                                </article>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p>No saved channels available for notifications.</p>
+                    {% endif %}
+                </section>
+
+                <section class="card">
+                    <h2>Active Recordings</h2>
+                    {% if active_recordings %}
+                        <div class="recording-list">
+                            {% for item in active_recordings %}
+                                <article class="recording-item">
+                                    <div class="recording-header">
+                                        <strong class="item-name">{{ item.channel }}</strong>
+                                        <form action="{{ url_for('dashboard.stop_recording') }}" method="post">
+                                            <input type="hidden" name="channel" value="{{ item.channel }}">
+                                            <button type="submit" class="danger">Stop</button>
+                                        </form>
+                                    </div>
+                                    <dl class="recording-meta">
+                                        <div>
+                                            <dt>Quality</dt>
+                                            <dd>{{ item.quality }}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Started (UTC)</dt>
+                                            <dd class="utc-datetime" data-utc="{{ item.started_at }}">{{ item.started_at }}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>PID</dt>
+                                            <dd>{{ item.pid }}</dd>
+                                        </div>
+                                        <div class="wide">
+                                            <dt>Output File</dt>
+                                            <dd class="path-value">{{ item.output_file }}</dd>
+                                        </div>
+                                    </dl>
+                                </article>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p>No active recordings.</p>
+                    {% endif %}
+                </section>
+            </section>
+        </div>
+    </main>
+
+    {% include 'partials/panel_overlay.html' %}
+
+    <script src="{{ url_for('static', filename='panel_controls.js') }}" defer></script>
+    <script>
+        (() => {
+            const displayTimezonePreference = {{ display_timezone | tojson }};
+
+            const resolveDisplayTimezone = () => {
+                if (typeof displayTimezonePreference === 'string' && displayTimezonePreference && displayTimezonePreference !== 'auto') {
+                    return displayTimezonePreference;
+                }
+
+                try {
+                    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+                } catch (_error) {
+                    return undefined;
+                }
+            };
+
+            const formatUtcIso = (value) => {
+                if (typeof value !== 'string' || !value.trim()) {
+                    return null;
+                }
+
+                const parsed = new Date(value);
+                if (Number.isNaN(parsed.getTime())) {
+                    return null;
+                }
+
+                const timezone = resolveDisplayTimezone();
+                try {
+                    return parsed.toLocaleString(undefined, timezone ? { timeZone: timezone } : undefined);
+                } catch (_error) {
+                    return parsed.toLocaleString();
+                }
+            };
+
+            const hydrateUtcDateTimes = () => {
+                const utcElements = document.querySelectorAll('.utc-datetime[data-utc]');
+                for (const element of utcElements) {
+                    const rawValue = element.getAttribute('data-utc') || '';
+                    const formatted = formatUtcIso(rawValue);
+                    if (formatted) {
+                        element.textContent = formatted;
+                    }
+                }
+            };
+
+            hydrateUtcDateTimes();
+
+            const syncStatusElement = document.getElementById('live-sync-status');
+            const statusUrl = "{{ url_for('dashboard.status') }}";
+            let dashboardSignature = {{ dashboard_signature | tojson }};
+            let pollTimer = null;
+            let requestInFlight = false;
+
+            const setSyncStatus = (text, isError = false) => {
+                if (!syncStatusElement) {
+                    return;
+                }
+
+                syncStatusElement.textContent = text;
+                syncStatusElement.classList.toggle('is-error', isError);
+            };
+
+            const syncDashboardState = async () => {
+                if (requestInFlight) {
+                    return;
+                }
+
+                requestInFlight = true;
+
+                try {
+                    const response = await fetch(statusUrl, {
+                        cache: 'no-store',
+                        headers: {
+                            'X-Requested-With': 'vstreamware-live-sync',
+                        },
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`status ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    const nextSignature = typeof payload.signature === 'string' ? payload.signature : '';
+                    if (nextSignature && nextSignature !== dashboardSignature) {
+                        window.location.reload();
+                        return;
+                    }
+
+                    if (nextSignature) {
+                        dashboardSignature = nextSignature;
+                    }
+
+                    setSyncStatus('Live sync connected.');
+                } catch (_error) {
+                    setSyncStatus('Live sync retrying...', true);
+                } finally {
+                    requestInFlight = false;
+                }
+            };
+
+            const startPolling = () => {
+                if (pollTimer !== null) {
+                    return;
+                }
+
+                pollTimer = window.setInterval(syncDashboardState, 2000);
+            };
+
+            const stopPolling = () => {
+                if (pollTimer === null) {
+                    return;
+                }
+
+                window.clearInterval(pollTimer);
+                pollTimer = null;
+            };
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    stopPolling();
+                    return;
+                }
+
+                syncDashboardState();
+                startPolling();
+            });
+
+            window.addEventListener('beforeunload', stopPolling);
+
+            syncDashboardState();
+            startPolling();
+        })();
+    </script>
+</body>
+</html>

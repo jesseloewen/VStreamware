@@ -1,0 +1,1599 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#141414">
+    <meta name="application-name" content="VStreamware">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="VStreamware">
+    <title>{{ recording.display_title }} - VStreamware</title>
+    <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16x16.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <main class="container">
+        <header class="page-header browser-header">
+            <h1 class="app-title">
+                <a class="app-title-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
+                    <img class="app-title-icon" src="{{ url_for('static', filename='icons/icon-64.png') }}" alt="VStreamware icon">
+                    <span>VStreamware</span>
+                </a>
+            </h1>
+            <div class="header-actions">
+                <a class="button-link" href="{{ url_for('dashboard.index') }}">Back To Browser</a>
+            </div>
+            <p>Single-video viewer.</p>
+        </header>
+
+        <div class="mobile-panel-controls" aria-label="Panel controls">
+            {% include 'partials/saved_panel_toggle_button.html' %}
+        </div>
+
+        <div class="browser-layout">
+            {% include 'partials/saved_channels_panel.html' %}
+
+            <section class="browser-main-column">
+                <section class="card video-detail-card">
+                    <header class="video-detail-header">
+                        <div>
+                            <h2>{{ recording.display_title }}</h2>
+                            <p class="muted">{{ recording.channel }} / {{ recording.day }}</p>
+                        </div>
+                        <div class="video-item-badges">
+                            {% if recording.is_live %}
+                                <span class="badge live">LIVE</span>
+                            {% else %}
+                                <span class="badge neutral">Recorded</span>
+                            {% endif %}
+                            {% if recording.quality %}
+                                <span class="meta-chip">Quality {{ recording.quality }}</span>
+                            {% endif %}
+                        </div>
+                    </header>
+
+                    {% if recording.can_play %}
+                        <div class="video-detail-content">
+                            <div class="video-detail-player-column">
+                                <div class="video-detail-player-wrap">
+                                    <video id="detail-video" controls preload="auto" src="{{ recording.media_url }}"{% if recording.is_live %} playsinline{% endif %}></video>
+                                </div>
+                                {% if recording.is_live %}
+                                    <div class="live-controls-row">
+                                        <button type="button" id="live-mode-toggle-button" class="button-link live-catchup-button">Live Mode: On</button>
+                                        <button type="button" id="live-refresh-button" class="button-link live-refresh-button" hidden>Refresh</button>
+                                        <div class="live-buffer-control">
+                                            <label for="live-buffer-slider">Buffer</label>
+                                            <input
+                                                id="live-buffer-slider"
+                                                type="range"
+                                                min="{{ live_buffer_min_seconds }}"
+                                                max="{{ live_buffer_max_seconds }}"
+                                                step="1"
+                                                value="{{ live_buffer_default_seconds }}"
+                                                aria-label="Live playback buffer in seconds"
+                                            >
+                                            <input
+                                                id="live-buffer-input"
+                                                type="number"
+                                                min="{{ live_buffer_min_seconds }}"
+                                                max="{{ live_buffer_max_seconds }}"
+                                                step="1"
+                                                value="{{ live_buffer_default_seconds }}"
+                                                aria-label="Live playback buffer seconds"
+                                            >
+                                        </div>
+                                        <span id="live-mode-hint" class="muted">Direct live playback is active.</span>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div
+                                class="video-chat-resize-handle"
+                                id="video-chat-resize-handle"
+                                role="separator"
+                                aria-orientation="vertical"
+                                aria-label="Resize fullscreen chat panel"
+                                tabindex="0"
+                            ></div>
+                            <aside class="video-chat-panel" aria-live="polite">
+                                <header class="video-chat-header">
+                                    <h3>Chat Replay</h3>
+                                    <div class="video-chat-header-actions">
+                                        <button type="button" class="button-link chat-fullscreen-toggle" data-chat-fullscreen-toggle>Expand</button>
+                                        <button type="button" class="button-link chat-native-fullscreen-toggle" data-chat-native-fullscreen-toggle>Fullscreen</button>
+                                    </div>
+                                </header>
+                                <p class="muted sync-status" id="chat-sync-status">Connecting to chat timeline...</p>
+                                <div class="video-chat-list" id="video-chat-list"></div>
+                                <button type="button" class="button-link chat-jump-latest" id="chat-jump-latest" hidden>Jump To Latest</button>
+                            </aside>
+                        </div>
+                    {% else %}
+                        <div class="video-unavailable">Recording file is not ready for playback yet.</div>
+                    {% endif %}
+
+                    <dl class="video-meta-grid">
+                        <div>
+                            <dt>Recorded</dt>
+                            <dd class="utc-datetime" data-utc="{{ recording.recorded_at if recording.recorded_at else '' }}">{{ recording.recorded_at if recording.recorded_at else 'Unknown' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Size</dt>
+                            <dd>{{ recording.size_bytes }} bytes</dd>
+                        </div>
+                        <div class="chat-offset-meta">
+                            <dt>Chat Offset</dt>
+                            <dd>
+                                <div class="chat-offset-control">
+                                    <label for="chat-offset-slider">Chat Offset</label>
+                                    <input
+                                        id="chat-offset-slider"
+                                        type="range"
+                                        min="-30"
+                                        max="30"
+                                        step="1"
+                                        value="0"
+                                        aria-label="Chat replay offset in seconds"
+                                    >
+                                    <input
+                                        id="chat-offset-input"
+                                        type="number"
+                                        min="-30"
+                                        max="30"
+                                        step="1"
+                                        value="0"
+                                        aria-label="Chat replay offset seconds"
+                                    >
+                                </div>
+                            </dd>
+                        </div>
+                        <div class="wide">
+                            <dt>File</dt>
+                            <dd>{{ recording.file_name }}</dd>
+                        </div>
+                        <div class="wide">
+                            <dt>Path</dt>
+                            <dd>{{ recording.relative_path }}</dd>
+                        </div>
+                    </dl>
+                </section>
+            </section>
+        </div>
+    </main>
+
+    {% include 'partials/panel_overlay.html' %}
+
+    <script src="{{ url_for('static', filename='panel_controls.js') }}" defer></script>
+    <script>
+        (() => {
+            const player = document.getElementById('detail-video');
+            const liveModeToggleButton = document.getElementById('live-mode-toggle-button');
+            const refreshButton = document.getElementById('live-refresh-button');
+            const liveModeHint = document.getElementById('live-mode-hint');
+            const liveBufferSlider = document.getElementById('live-buffer-slider');
+            const liveBufferInput = document.getElementById('live-buffer-input');
+            const chatList = document.getElementById('video-chat-list');
+            const chatJumpLatestButton = document.getElementById('chat-jump-latest');
+            const chatSyncStatus = document.getElementById('chat-sync-status');
+            const chatSyncMode = document.getElementById('chat-sync-mode');
+            const chatOffsetSlider = document.getElementById('chat-offset-slider');
+            const chatOffsetInput = document.getElementById('chat-offset-input');
+            const videoDetailContent = document.querySelector('.video-detail-content');
+            const videoPlayerWrap = document.querySelector('.video-detail-player-wrap');
+            const chatPanel = document.querySelector('.video-chat-panel');
+            const chatResizeHandle = document.getElementById('video-chat-resize-handle');
+            const fullscreenChatToggleButtons = Array.from(document.querySelectorAll('[data-chat-fullscreen-toggle]'));
+            const nativeFullscreenToggleButtons = Array.from(document.querySelectorAll('[data-chat-native-fullscreen-toggle]'));
+            const displayTimezonePreference = {{ display_timezone | tojson }};
+            const isLive = {{ 'true' if recording.is_live else 'false' }};
+            const chatUrl = {{ recording.chat_url | tojson }};
+            let recordingStartUtcMs = {{ recording.recording_start_utc_ms if recording.recording_start_utc_ms is not none else 'null' }};
+            const liveOffsetSecondsDefault = {{ live_buffer_default_seconds }};
+            const liveOffsetSecondsMin = {{ live_buffer_min_seconds }};
+            const liveOffsetSecondsMax = {{ live_buffer_max_seconds }};
+            const liveBufferStorageKey = 'vstreamware.live-buffer-seconds';
+            const chatOffsetStorageKey = 'vstreamware.chat-offset-seconds';
+            const fullscreenChatWidthStorageKey = 'vstreamware.fullscreen-chat-width';
+            const chatOffsetSecondsDefault = 0;
+            const chatOffsetSecondsMin = -30;
+            const chatOffsetSecondsMax = 30;
+            let inDvrMode = false;
+            let isChatResizing = false;
+            let activeResizePointerId = null;
+            let chatOffsetSeconds = chatOffsetSecondsDefault;
+            let highlightedInputTimer = null;
+            let isChatAutoFollowEnabled = true;
+            const chatAutoFollowBottomThresholdPx = 24;
+            let renderedChatMessageKeys = [];
+            let renderedChatMessageKeySet = new Set();
+
+            const isNativeFullscreenLayout = () => document.fullscreenElement === videoDetailContent;
+            const isBrowserExpandedLayout = () => Boolean(videoDetailContent && videoDetailContent.classList.contains('is-chat-layout-expanded'));
+
+            const readFullscreenChatWidth = () => {
+                try {
+                    const stored = window.localStorage.getItem(fullscreenChatWidthStorageKey);
+                    if (!stored) {
+                        return null;
+                    }
+
+                    const parsed = Number.parseInt(stored, 10);
+                    if (!Number.isFinite(parsed) || parsed <= 0) {
+                        return null;
+                    }
+
+                    return parsed;
+                } catch (_error) {
+                    return null;
+                }
+            };
+
+            const clampFullscreenChatWidth = (candidateWidth) => {
+                const viewportWidth = Math.max(window.innerWidth || 0, 800);
+                const minWidth = 280;
+                const maxWidth = Math.max(minWidth, Math.floor(viewportWidth * 0.52));
+                const nextWidth = Number.parseInt(String(candidateWidth), 10);
+                if (!Number.isFinite(nextWidth)) {
+                    return Math.min(Math.max(Math.floor(viewportWidth * 0.34), minWidth), maxWidth);
+                }
+
+                return Math.min(Math.max(nextWidth, minWidth), maxWidth);
+            };
+
+            const setFullscreenChatWidth = (candidateWidth, persist = true) => {
+                if (!videoDetailContent) {
+                    return null;
+                }
+
+                const nextWidth = clampFullscreenChatWidth(candidateWidth);
+                videoDetailContent.style.setProperty('--fullscreen-chat-width', `${nextWidth}px`);
+
+                if (chatResizeHandle) {
+                    const viewportWidth = Math.max(window.innerWidth || 0, 1);
+                    const ratio = Math.round((nextWidth / viewportWidth) * 100);
+                    chatResizeHandle.setAttribute('aria-valuenow', String(ratio));
+                }
+
+                if (persist) {
+                    try {
+                        window.localStorage.setItem(fullscreenChatWidthStorageKey, String(nextWidth));
+                    } catch (_error) {
+                        // Ignore storage failures.
+                    }
+                }
+
+                return nextWidth;
+            };
+
+            const setNormalModeChatHeight = () => {
+                if (!videoDetailContent || !videoPlayerWrap || !chatPanel) {
+                    return;
+                }
+
+                if (isNativeFullscreenLayout() || isBrowserExpandedLayout()) {
+                    return;
+                }
+
+                const wrapRect = videoPlayerWrap.getBoundingClientRect();
+                if (wrapRect.height <= 0) {
+                    return;
+                }
+
+                videoDetailContent.style.setProperty('--video-chat-height', `${Math.round(wrapRect.height)}px`);
+            };
+
+            const applyLayoutState = () => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                const isNativeFullscreen = isNativeFullscreenLayout();
+                const isBrowserExpanded = isBrowserExpandedLayout();
+                const isExpanded = isNativeFullscreen || isBrowserExpanded;
+
+                document.body.classList.toggle('is-chat-layout-expanded', isExpanded);
+
+                for (const button of fullscreenChatToggleButtons) {
+                    button.textContent = isBrowserExpanded ? 'Exit Expanded' : 'Expand';
+                }
+
+                for (const button of nativeFullscreenToggleButtons) {
+                    button.textContent = isNativeFullscreen ? 'Exit Fullscreen' : 'Fullscreen';
+                    button.disabled = !isBrowserExpanded && !isNativeFullscreen;
+                }
+
+                if (isExpanded) {
+                    const restoredWidth = readFullscreenChatWidth();
+                    setFullscreenChatWidth(restoredWidth ?? Math.floor(window.innerWidth * 0.34), false);
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                    return;
+                }
+
+                document.body.classList.remove('is-chat-resizing');
+                isChatResizing = false;
+                activeResizePointerId = null;
+                setNormalModeChatHeight();
+            };
+
+            const setBrowserExpandedLayout = (enabled) => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                videoDetailContent.classList.toggle('is-chat-layout-expanded', Boolean(enabled));
+                applyLayoutState();
+            };
+
+            const toggleBrowserExpandedLayout = async () => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                const shouldExpand = !isBrowserExpandedLayout();
+
+                if (!shouldExpand && isNativeFullscreenLayout()) {
+                    try {
+                        await document.exitFullscreen();
+                    } catch (_error) {
+                        // Ignore fullscreen exit failures.
+                    }
+                }
+
+                setBrowserExpandedLayout(shouldExpand);
+            };
+
+            const toggleNativeFullscreenLayout = async () => {
+                if (!videoDetailContent || !document.fullscreenEnabled) {
+                    return;
+                }
+
+                try {
+                    if (isNativeFullscreenLayout()) {
+                        await document.exitFullscreen();
+                    } else {
+                        if (!isBrowserExpandedLayout()) {
+                            setBrowserExpandedLayout(true);
+                        }
+
+                        await videoDetailContent.requestFullscreen();
+                    }
+                } catch (_error) {
+                    // Ignore fullscreen API errors and continue playback.
+                }
+
+                applyLayoutState();
+            };
+
+            const handleResizePointerMove = (event) => {
+                if (!isChatResizing || !videoDetailContent || (!isNativeFullscreenLayout() && !isBrowserExpandedLayout())) {
+                    return;
+                }
+
+                const bounds = videoDetailContent.getBoundingClientRect();
+                const nextWidth = Math.round(bounds.right - event.clientX);
+                setFullscreenChatWidth(nextWidth, false);
+            };
+
+            const stopResizePointerSession = () => {
+                if (!isChatResizing) {
+                    return;
+                }
+
+                document.body.classList.remove('is-chat-resizing');
+                isChatResizing = false;
+                activeResizePointerId = null;
+
+                if (videoDetailContent) {
+                    const computed = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-chat-width').trim();
+                    const numeric = Number.parseInt(computed, 10);
+                    if (Number.isFinite(numeric)) {
+                        setFullscreenChatWidth(numeric, true);
+                    }
+                }
+            };
+
+            const resolveDisplayTimezone = () => {
+                if (typeof displayTimezonePreference === 'string' && displayTimezonePreference && displayTimezonePreference !== 'auto') {
+                    return displayTimezonePreference;
+                }
+
+                try {
+                    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+                } catch (_error) {
+                    return undefined;
+                }
+            };
+
+            const formatUtcIso = (rawIso) => {
+                if (typeof rawIso !== 'string' || !rawIso.trim()) {
+                    return null;
+                }
+
+                const parsed = new Date(rawIso);
+                if (Number.isNaN(parsed.getTime())) {
+                    return null;
+                }
+
+                const timezone = resolveDisplayTimezone();
+                try {
+                    return parsed.toLocaleString(undefined, timezone ? { timeZone: timezone } : undefined);
+                } catch (_error) {
+                    return parsed.toLocaleString();
+                }
+            };
+
+            const formatUtcMs = (valueMs) => {
+                const numeric = Number(valueMs);
+                if (!Number.isFinite(numeric)) {
+                    return null;
+                }
+
+                const parsed = new Date(numeric);
+                if (Number.isNaN(parsed.getTime())) {
+                    return null;
+                }
+
+                const timezone = resolveDisplayTimezone();
+                try {
+                    return parsed.toLocaleString(undefined, timezone ? { timeZone: timezone } : undefined);
+                } catch (_error) {
+                    return parsed.toLocaleString();
+                }
+            };
+
+            const hydrateUtcDateTimes = () => {
+                const utcElements = document.querySelectorAll('.utc-datetime[data-utc]');
+                for (const element of utcElements) {
+                    const rawValue = element.getAttribute('data-utc') || '';
+                    const formatted = formatUtcIso(rawValue);
+                    if (formatted) {
+                        element.textContent = formatted;
+                    }
+                }
+            };
+
+            const escapeHtml = (value) => String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+
+            const normalizeTagBoolean = (value) => String(value ?? '').trim() === '1';
+
+            const sanitizeChatColor = (value) => {
+                const raw = String(value ?? '').trim();
+                return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '';
+            };
+
+            const fallbackAuthorColor = (name) => {
+                const source = String(name ?? '').trim().toLowerCase();
+                if (!source) {
+                    return '#93c5fd';
+                }
+
+                let hash = 0;
+                for (const char of source) {
+                    hash = ((hash << 5) - hash) + char.charCodeAt(0);
+                    hash |= 0;
+                }
+
+                const hue = Math.abs(hash) % 360;
+                return `hsl(${hue} 70% 68%)`;
+            };
+
+            const parseBadgeEntries = (rawBadges) => {
+                const raw = String(rawBadges ?? '').trim();
+                if (!raw) {
+                    return [];
+                }
+
+                return raw.split(',')
+                    .map((entry) => entry.trim())
+                    .filter(Boolean)
+                    .map((entry) => {
+                        const [name, version] = entry.split('/', 2);
+                        return {
+                            name: String(name ?? '').trim(),
+                            version: String(version ?? '').trim(),
+                        };
+                    })
+                    .filter((entry) => entry.name);
+            };
+
+            const badgeMetaByType = {
+                broadcaster: { label: 'Broadcaster', className: 'is-broadcaster' },
+                moderator: { label: 'Mod', className: 'is-moderator' },
+                vip: { label: 'VIP', className: 'is-vip' },
+                subscriber: { label: 'Sub', className: 'is-subscriber' },
+                founder: { label: 'Founder', className: 'is-founder' },
+                premium: { label: 'Prime', className: 'is-premium' },
+                partner: { label: 'Partner', className: 'is-partner' },
+                turbo: { label: 'Turbo', className: 'is-turbo' },
+                'bot-badge': { label: 'Bot', className: 'is-bot' },
+            };
+
+            const renderBadgeChips = (tags) => {
+                const badges = parseBadgeEntries(tags?.badges);
+                if (badges.length === 0) {
+                    return '';
+                }
+
+                return badges.map((badge) => {
+                    const meta = badgeMetaByType[badge.name] || {
+                        label: badge.name.replace(/[-_]/g, ' '),
+                        className: 'is-generic',
+                    };
+
+                    const suffix = badge.version ? ` ${badge.version}` : '';
+                    const label = `${meta.label}${suffix}`.trim();
+                    return `<span class="video-chat-badge ${meta.className}">${escapeHtml(label)}</span>`;
+                }).join('');
+            };
+
+            const highlightMentions = (escapedText) => escapedText.replace(
+                /(^|[\s(])(@[a-zA-Z0-9_]{2,25})\b/g,
+                '$1<span class="video-chat-mention">$2</span>',
+            );
+
+            const parseEmoteRanges = (rawEmotes) => {
+                const raw = String(rawEmotes ?? '').trim();
+                if (!raw) {
+                    return [];
+                }
+
+                const ranges = [];
+                for (const token of raw.split('/')) {
+                    const [emoteIdRaw, positionsRaw] = token.split(':', 2);
+                    const emoteId = String(emoteIdRaw ?? '').trim();
+                    if (!emoteId || !positionsRaw) {
+                        continue;
+                    }
+
+                    for (const positionToken of positionsRaw.split(',')) {
+                        const [startRaw, endRaw] = positionToken.split('-', 2);
+                        const start = Number.parseInt(String(startRaw ?? ''), 10);
+                        const end = Number.parseInt(String(endRaw ?? ''), 10);
+                        if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+                            continue;
+                        }
+
+                        ranges.push({ emoteId, start, end });
+                    }
+                }
+
+                return ranges.sort((left, right) => left.start - right.start);
+            };
+
+            const renderMessageTextWithEmotes = (text, rawEmotes) => {
+                const rawText = String(text ?? '');
+                const ranges = parseEmoteRanges(rawEmotes);
+                if (ranges.length === 0) {
+                    return highlightMentions(escapeHtml(rawText));
+                }
+
+                let cursor = 0;
+                const parts = [];
+                for (const range of ranges) {
+                    if (range.start < cursor || range.start >= rawText.length) {
+                        continue;
+                    }
+
+                    if (range.start > cursor) {
+                        const plainSegment = rawText.slice(cursor, range.start);
+                        parts.push(highlightMentions(escapeHtml(plainSegment)));
+                    }
+
+                    const endExclusive = Math.min(range.end + 1, rawText.length);
+                    const emoteText = rawText.slice(range.start, endExclusive) || 'emote';
+                    const emoteUrl = `https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(range.emoteId)}/default/dark/1.0`;
+                    parts.push(`<img class="video-chat-emote" src="${emoteUrl}" alt="${escapeHtml(emoteText)}" loading="lazy" decoding="async">`);
+                    cursor = endExclusive;
+                }
+
+                if (cursor < rawText.length) {
+                    parts.push(highlightMentions(escapeHtml(rawText.slice(cursor))));
+                }
+
+                return parts.join('');
+            };
+
+            const parseActionMessage = (rawText) => {
+                const text = String(rawText ?? '');
+                if (text.startsWith('\u0001ACTION ') && text.endsWith('\u0001')) {
+                    return {
+                        isAction: true,
+                        text: text.slice(8, -1),
+                    };
+                }
+
+                return {
+                    isAction: false,
+                    text,
+                };
+            };
+
+            const decodeReplyBody = (rawValue) => {
+                const source = String(rawValue ?? '');
+                if (!source) {
+                    return '';
+                }
+
+                return source
+                    .replace(/\\s/g, ' ')
+                    .replace(/\\:/g, ';')
+                    .replace(/\\r/g, '\r')
+                    .replace(/\\n/g, '\n')
+                    .replace(/\\\\/g, '\\');
+            };
+
+            const setChatStatus = (text, isError = false) => {
+                if (!chatSyncStatus) {
+                    return;
+                }
+
+                chatSyncStatus.textContent = text;
+                chatSyncStatus.classList.toggle('is-error', isError);
+            };
+
+            const highlightDefaultedInput = (inputElement) => {
+                if (!(inputElement instanceof HTMLInputElement)) {
+                    return;
+                }
+
+                inputElement.classList.add('is-defaulted');
+
+                if (highlightedInputTimer !== null) {
+                    window.clearTimeout(highlightedInputTimer);
+                }
+
+                highlightedInputTimer = window.setTimeout(() => {
+                    inputElement.classList.remove('is-defaulted');
+                    highlightedInputTimer = null;
+                }, 900);
+
+                if (document.activeElement === inputElement) {
+                    inputElement.select();
+                }
+            };
+
+            const isChatNearBottom = () => {
+                if (!chatList) {
+                    return true;
+                }
+
+                const distanceFromBottom = chatList.scrollHeight - (chatList.scrollTop + chatList.clientHeight);
+                return distanceFromBottom <= chatAutoFollowBottomThresholdPx;
+            };
+
+            const updateChatFollowUi = () => {
+                if (!chatJumpLatestButton || !chatList) {
+                    return;
+                }
+
+                const hasMessages = chatList.childElementCount > 0;
+                chatJumpLatestButton.hidden = !hasMessages || isChatAutoFollowEnabled;
+            };
+
+            const setChatAutoFollow = (enabled) => {
+                isChatAutoFollowEnabled = Boolean(enabled);
+                updateChatFollowUi();
+            };
+
+            const jumpChatToLatest = () => {
+                if (!chatList) {
+                    return;
+                }
+
+                chatList.scrollTop = chatList.scrollHeight;
+                setChatAutoFollow(true);
+            };
+
+            const buildChatMessageKey = (item, tags) => {
+                const tagId = String(tags?.id || '').trim();
+                if (tagId) {
+                    return `id:${tagId}`;
+                }
+
+                const utcPart = Number.isFinite(Number(item?.utc_ms)) ? String(Math.round(Number(item.utc_ms))) : String(item?.utc_iso || '');
+                const authorPart = String(tags?.['display-name'] || item?.author || 'unknown').trim().toLowerCase();
+                const textPart = String(item?.text || '').trim();
+                return `fallback:${utcPart}:${authorPart}:${textPart}`;
+            };
+
+            const resetRenderedChatState = () => {
+                renderedChatMessageKeys = [];
+                renderedChatMessageKeySet = new Set();
+            };
+
+            const renderSingleChatMessage = (item) => {
+                const tags = item && typeof item.tags === 'object' && item.tags !== null ? item.tags : {};
+                const when = formatUtcMs(item.utc_ms) || String(item.utc_iso || '');
+                const displayName = String(tags['display-name'] || item.author || 'unknown');
+                const authorColor = sanitizeChatColor(tags.color) || fallbackAuthorColor(displayName);
+                const messageMeta = parseActionMessage(item.text || '');
+                const bodyHtml = renderMessageTextWithEmotes(messageMeta.text, tags.emotes);
+                const badgesHtml = renderBadgeChips(tags);
+
+                const isFirstMessage = normalizeTagBoolean(tags['first-msg']);
+                const isReturningChatter = normalizeTagBoolean(tags['returning-chatter']);
+                const isReply = Boolean(tags['reply-parent-display-name']) && Boolean(tags['reply-parent-msg-body']);
+                const replyAuthor = String(tags['reply-parent-display-name'] || '').trim();
+                const replyBody = decodeReplyBody(tags['reply-parent-msg-body'] || '');
+
+                const chips = [];
+                if (isFirstMessage) {
+                    chips.push('<span class="video-chat-meta-chip">First</span>');
+                }
+                if (isReturningChatter) {
+                    chips.push('<span class="video-chat-meta-chip">Returning</span>');
+                }
+
+                const articleClasses = [
+                    'video-chat-item',
+                    isFirstMessage ? 'is-first-message' : '',
+                    messageMeta.isAction ? 'is-action-message' : '',
+                ].filter(Boolean).join(' ');
+
+                const replyHtml = isReply
+                    ? `<p class="video-chat-reply"><span>↪ ${escapeHtml(replyAuthor)}</span> ${escapeHtml(replyBody)}</p>`
+                    : '';
+
+                return `
+                    <article class="${articleClasses}">
+                        <header>
+                            <div class="video-chat-author-line">
+                                <span class="video-chat-badges">${badgesHtml}</span>
+                                <strong class="video-chat-author" style="color: ${escapeHtml(authorColor)}">${escapeHtml(displayName)}</strong>
+                                <span class="video-chat-meta">${chips.join('')}</span>
+                            </div>
+                            <span class="muted">${escapeHtml(when)}</span>
+                        </header>
+                        ${replyHtml}
+                        <p class="video-chat-message">${bodyHtml}</p>
+                    </article>
+                `;
+            };
+
+            const renderChatMessages = (messages, options = {}) => {
+                if (!chatList) {
+                    return;
+                }
+
+                const shouldReset = Boolean(options.reset);
+                if (shouldReset) {
+                    resetRenderedChatState();
+                    chatList.innerHTML = '';
+                }
+
+                const wasNearBottom = isChatNearBottom();
+                const shouldStickToBottom = isChatAutoFollowEnabled || wasNearBottom;
+
+                if (!Array.isArray(messages) || messages.length === 0) {
+                    if (chatList.childElementCount === 0) {
+                        chatList.innerHTML = '<p class="video-chat-empty muted">No chat messages in this timeline window yet.</p>';
+                    }
+                    setChatAutoFollow(true);
+                    return;
+                }
+
+                const normalizedMessages = messages
+                    .map((item) => {
+                        const tags = item && typeof item.tags === 'object' && item.tags !== null ? item.tags : {};
+                        const key = buildChatMessageKey(item, tags);
+                        const utcMs = Number.isFinite(Number(item?.utc_ms)) ? Number(item.utc_ms) : Number.NaN;
+                        return { item, key, utcMs };
+                    })
+                    .sort((left, right) => {
+                        if (Number.isFinite(left.utcMs) && Number.isFinite(right.utcMs)) {
+                            return left.utcMs - right.utcMs;
+                        }
+
+                        return left.key.localeCompare(right.key);
+                    });
+
+                if (shouldStickToBottom || shouldReset || renderedChatMessageKeys.length === 0) {
+                    renderedChatMessageKeys = normalizedMessages.map((entry) => entry.key);
+                    renderedChatMessageKeySet = new Set(renderedChatMessageKeys);
+                    chatList.innerHTML = normalizedMessages.map((entry) => renderSingleChatMessage(entry.item)).join('');
+
+                    jumpChatToLatest();
+                    return;
+                }
+
+                const appendEntries = normalizedMessages.filter((entry) => !renderedChatMessageKeySet.has(entry.key));
+                if (appendEntries.length > 0) {
+                    const emptyNode = chatList.querySelector('.video-chat-empty');
+                    if (emptyNode) {
+                        emptyNode.remove();
+                    }
+
+                    chatList.insertAdjacentHTML('beforeend', appendEntries.map((entry) => renderSingleChatMessage(entry.item)).join(''));
+                    for (const entry of appendEntries) {
+                        renderedChatMessageKeySet.add(entry.key);
+                        renderedChatMessageKeys.push(entry.key);
+                    }
+                }
+
+                setChatAutoFollow(false);
+            };
+
+            const formatSignedSeconds = (rawValue) => {
+                const numeric = Number(rawValue);
+                if (!Number.isFinite(numeric)) {
+                    return '0s';
+                }
+
+                const rounded = Math.round(numeric);
+                if (rounded > 0) {
+                    return `+${rounded}s`;
+                }
+
+                return `${rounded}s`;
+            };
+
+            const clampChatOffsetSeconds = (rawValue) => {
+                const parsed = Number.parseInt(String(rawValue), 10);
+                if (!Number.isFinite(parsed)) {
+                    return chatOffsetSecondsDefault;
+                }
+
+                return Math.max(chatOffsetSecondsMin, Math.min(chatOffsetSecondsMax, parsed));
+            };
+
+            const setChatOffsetSeconds = (rawValue, persist = true) => {
+                chatOffsetSeconds = clampChatOffsetSeconds(rawValue);
+
+                if (chatOffsetSlider && chatOffsetSlider.value !== String(chatOffsetSeconds)) {
+                    chatOffsetSlider.value = String(chatOffsetSeconds);
+                }
+
+                if (chatOffsetInput && chatOffsetInput.value !== String(chatOffsetSeconds)) {
+                    chatOffsetInput.value = String(chatOffsetSeconds);
+                }
+
+                if (persist) {
+                    try {
+                        window.localStorage.setItem(chatOffsetStorageKey, String(chatOffsetSeconds));
+                    } catch (_error) {
+                        // Ignore storage failures.
+                    }
+                }
+
+                return chatOffsetSeconds;
+            };
+
+            const readPersistedChatOffsetSeconds = () => {
+                try {
+                    const rawValue = window.localStorage.getItem(chatOffsetStorageKey);
+                    if (!rawValue) {
+                        return chatOffsetSecondsDefault;
+                    }
+
+                    return clampChatOffsetSeconds(rawValue);
+                } catch (_error) {
+                    return chatOffsetSecondsDefault;
+                }
+            };
+
+            const updateChatSyncMode = (liveOffsetSeconds) => {
+                if (!chatSyncMode) {
+                    return;
+                }
+
+                if (isLive && !inDvrMode) {
+                    chatSyncMode.hidden = false;
+                    chatSyncMode.textContent = `Live (-${liveOffsetSeconds}s)`;
+                    return;
+                }
+
+                if (isLive && inDvrMode) {
+                    chatSyncMode.hidden = false;
+                    chatSyncMode.textContent = 'Live Replay';
+                    return;
+                }
+
+                chatSyncMode.hidden = true;
+                chatSyncMode.textContent = '';
+            };
+
+            const computeChatTargetUtcMs = (liveOffsetSeconds) => {
+                if (!player) {
+                    return null;
+                }
+
+                if (isLive && !inDvrMode) {
+                    const baseTargetMs = Date.now() - (Math.max(liveOffsetSeconds, 0) * 1000);
+                    return baseTargetMs + (chatOffsetSeconds * 1000);
+                }
+
+                if (!Number.isFinite(recordingStartUtcMs)) {
+                    return null;
+                }
+
+                const playbackPositionMs = Math.round(Math.max(player.currentTime, 0) * 1000);
+                return Number(recordingStartUtcMs) + playbackPositionMs + (chatOffsetSeconds * 1000);
+            };
+
+            let chatSyncInFlight = false;
+            let chatPollTimer = null;
+            let lastChatSyncAt = 0;
+
+            const syncChatTimeline = async (liveOffsetSeconds, force = false) => {
+                if (!chatUrl || !player || !chatList || chatSyncInFlight) {
+                    return;
+                }
+
+                const now = Date.now();
+                if (!force && now - lastChatSyncAt < 1000) {
+                    return;
+                }
+
+                const targetUtcMs = computeChatTargetUtcMs(liveOffsetSeconds);
+                if (!Number.isFinite(targetUtcMs)) {
+                    setChatStatus('Waiting for playback timeline anchor...');
+                    return;
+                }
+
+                let requestUrl = '';
+                try {
+                    const url = new URL(chatUrl, window.location.href);
+                    url.searchParams.set('target_ms', String(Math.round(targetUtcMs)));
+                    url.searchParams.set('window_ms', String(isLive && !inDvrMode ? 180000 : 120000));
+                    url.searchParams.set('limit', String(isLive && !inDvrMode ? 220 : 180));
+                    requestUrl = url.toString();
+                } catch (_error) {
+                    const separator = chatUrl.includes('?') ? '&' : '?';
+                    requestUrl = `${chatUrl}${separator}target_ms=${encodeURIComponent(String(Math.round(targetUtcMs)))}`;
+                }
+
+                chatSyncInFlight = true;
+                try {
+                    const response = await fetch(requestUrl, {
+                        cache: 'no-store',
+                        headers: {
+                            'X-Requested-With': 'vstreamware-chat-sync',
+                        },
+                    });
+                    if (!response.ok) {
+                        throw new Error(`status ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    if (typeof payload.recording_start_utc_ms === 'number' && Number.isFinite(payload.recording_start_utc_ms)) {
+                        recordingStartUtcMs = payload.recording_start_utc_ms;
+                    }
+
+                    if (!payload.chat_enabled) {
+                        setChatStatus('Chat capture is disabled for this channel.');
+                        renderChatMessages([]);
+                        return;
+                    }
+
+                    const messages = Array.isArray(payload.messages) ? payload.messages : [];
+                    renderChatMessages(messages, { reset: force });
+
+                    if (!payload.available && messages.length === 0) {
+                        setChatStatus('Waiting for chat messages to be captured...');
+                    } else {
+                        const targetLabel = formatUtcMs(targetUtcMs) || 'timeline';
+                        setChatStatus(`Synced to ${targetLabel}.`);
+                    }
+
+                    lastChatSyncAt = now;
+                } catch (_error) {
+                    setChatStatus('Chat sync retrying...', true);
+                } finally {
+                    chatSyncInFlight = false;
+                }
+            };
+
+            const startChatPolling = (liveOffsetSecondsRef) => {
+                if (chatPollTimer !== null) {
+                    return;
+                }
+
+                chatPollTimer = window.setInterval(() => {
+                    void syncChatTimeline(liveOffsetSecondsRef());
+                }, 2000);
+            };
+
+            const stopChatPolling = () => {
+                if (chatPollTimer === null) {
+                    return;
+                }
+
+                window.clearInterval(chatPollTimer);
+                chatPollTimer = null;
+            };
+
+            hydrateUtcDateTimes();
+
+            if (!player) {
+                return;
+            }
+
+            player.muted = false;
+            player.defaultMuted = false;
+            player.autoplay = isLive;
+
+            setNormalModeChatHeight();
+            if (videoPlayerWrap && typeof ResizeObserver !== 'undefined') {
+                const chatHeightObserver = new ResizeObserver(() => {
+                    setNormalModeChatHeight();
+                });
+                chatHeightObserver.observe(videoPlayerWrap);
+            }
+
+            document.addEventListener('fullscreenchange', applyLayoutState);
+            window.addEventListener('resize', () => {
+                if (isNativeFullscreenLayout() || isBrowserExpandedLayout()) {
+                    const current = readFullscreenChatWidth();
+                    setFullscreenChatWidth(current ?? Math.floor(window.innerWidth * 0.34), false);
+                    return;
+                }
+
+                setNormalModeChatHeight();
+            });
+
+            if (chatList) {
+                chatList.addEventListener('scroll', () => {
+                    if (isChatNearBottom()) {
+                        setChatAutoFollow(true);
+                    } else {
+                        setChatAutoFollow(false);
+                    }
+                });
+            }
+
+            if (chatJumpLatestButton) {
+                chatJumpLatestButton.addEventListener('click', () => {
+                    jumpChatToLatest();
+                });
+            }
+
+            for (const button of fullscreenChatToggleButtons) {
+                button.addEventListener('click', () => {
+                    void toggleBrowserExpandedLayout();
+                });
+            }
+
+            for (const button of nativeFullscreenToggleButtons) {
+                button.addEventListener('click', () => {
+                    void toggleNativeFullscreenLayout();
+                });
+            }
+
+            if (chatResizeHandle) {
+                chatResizeHandle.addEventListener('pointerdown', (event) => {
+                    if (!videoDetailContent || (!isNativeFullscreenLayout() && !isBrowserExpandedLayout())) {
+                        return;
+                    }
+
+                    isChatResizing = true;
+                    activeResizePointerId = event.pointerId;
+                    document.body.classList.add('is-chat-resizing');
+                    chatResizeHandle.setPointerCapture(event.pointerId);
+                    event.preventDefault();
+                });
+
+                chatResizeHandle.addEventListener('pointermove', (event) => {
+                    if (!isChatResizing || activeResizePointerId !== event.pointerId) {
+                        return;
+                    }
+
+                    handleResizePointerMove(event);
+                });
+
+                chatResizeHandle.addEventListener('pointerup', (event) => {
+                    if (activeResizePointerId !== event.pointerId) {
+                        return;
+                    }
+
+                    stopResizePointerSession();
+                });
+
+                chatResizeHandle.addEventListener('pointercancel', () => {
+                    stopResizePointerSession();
+                });
+            }
+
+            const mediaBaseUrl = player.getAttribute('src') || '';
+            const maxInitialSeekAttempts = 8;
+            const livePullCheckIntervalMs = 3000;
+            const liveStallThresholdMs = 7000;
+            const liveAutoRefreshCooldownMs = 6000;
+            const dvrAutoRefreshCooldownMs = 2200;
+            const liveEdgeDetectionSeconds = 2.5;
+            let liveOffsetSeconds = liveOffsetSecondsDefault;
+            let liveRefreshInFlight = false;
+            let lastAutoLiveRefreshAt = 0;
+            let lastAutoDvrRefreshAt = 0;
+            let lastProgressAt = Date.now();
+            let lastProgressTime = 0;
+
+            const clampLiveOffsetSeconds = (rawValue) => {
+                const parsed = Number.parseInt(String(rawValue), 10);
+                if (!Number.isFinite(parsed)) {
+                    return Math.max(liveOffsetSecondsMin, Math.min(liveOffsetSecondsMax, liveOffsetSecondsDefault));
+                }
+
+                return Math.max(liveOffsetSecondsMin, Math.min(liveOffsetSecondsMax, parsed));
+            };
+
+            const setLiveOffsetSeconds = (rawValue, persist = true) => {
+                liveOffsetSeconds = clampLiveOffsetSeconds(rawValue);
+
+                if (liveBufferSlider && liveBufferSlider.value !== String(liveOffsetSeconds)) {
+                    liveBufferSlider.value = String(liveOffsetSeconds);
+                }
+
+                if (liveBufferInput && liveBufferInput.value !== String(liveOffsetSeconds)) {
+                    liveBufferInput.value = String(liveOffsetSeconds);
+                }
+
+                if (persist) {
+                    try {
+                        window.localStorage.setItem(liveBufferStorageKey, String(liveOffsetSeconds));
+                    } catch (_error) {
+                        // Storage failures should not break playback controls.
+                    }
+                }
+
+                return liveOffsetSeconds;
+            };
+
+            const readPersistedLiveOffsetSeconds = () => {
+                try {
+                    const rawValue = window.localStorage.getItem(liveBufferStorageKey);
+                    if (!rawValue) {
+                        return liveOffsetSecondsDefault;
+                    }
+
+                    return clampLiveOffsetSeconds(rawValue);
+                } catch (_error) {
+                    return liveOffsetSecondsDefault;
+                }
+            };
+
+            const createLiveDvrKey = () => `${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+
+            const buildLiveMediaUrl = (options = {}) => {
+                if (!mediaBaseUrl) {
+                    return '';
+                }
+
+                const dvrKey = typeof options.dvrKey === 'string' ? options.dvrKey : '';
+
+                try {
+                    const url = new URL(mediaBaseUrl, window.location.href);
+                    url.searchParams.set('live_offset', String(liveOffsetSeconds));
+                    if (dvrKey) {
+                        url.searchParams.set('live_dvr', dvrKey);
+                    } else {
+                        url.searchParams.delete('live_dvr');
+                    }
+
+                    return url.toString();
+                } catch (_error) {
+                    const separator = mediaBaseUrl.includes('?') ? '&' : '?';
+                    const offsetParam = `live_offset=${encodeURIComponent(String(liveOffsetSeconds))}`;
+                    const dvrParam = dvrKey ? `&live_dvr=${encodeURIComponent(dvrKey)}` : '';
+                    return `${mediaBaseUrl}${separator}${offsetParam}${dvrParam}`;
+                }
+            };
+
+            const calculateSmoothBufferSeconds = () => {
+                const derived = Math.round(liveOffsetSeconds * 0.8);
+                return Math.max(8, Math.min(45, derived));
+            };
+
+            const loadSource = (url, onReady) => {
+                if (!url) {
+                    return false;
+                }
+
+                const wasPaused = player.paused;
+                player.src = url;
+                player.load();
+                const handleReady = () => {
+                    if (typeof onReady === 'function') {
+                        onReady(wasPaused);
+                    }
+                };
+
+                player.addEventListener('loadedmetadata', handleReady, { once: true });
+                return true;
+            };
+
+            const tryPlay = () => {
+                void player.play().catch(() => {});
+            };
+
+            const getMediaEnd = () => {
+                if (player.seekable && player.seekable.length > 0) {
+                    const seekableEnd = player.seekable.end(player.seekable.length - 1);
+                    if (Number.isFinite(seekableEnd)) {
+                        return seekableEnd;
+                    }
+                }
+
+                if (Number.isFinite(player.duration)) {
+                    return player.duration;
+                }
+
+                return NaN;
+            };
+
+            const updateModeControls = () => {
+                if (liveModeToggleButton) {
+                    const liveOn = !inDvrMode;
+                    liveModeToggleButton.classList.toggle('is-live-edge', liveOn);
+                    liveModeToggleButton.textContent = liveOn ? 'Live Mode: On' : 'Live Mode: Off';
+
+                    if (refreshButton) {
+                        refreshButton.hidden = false;
+                        refreshButton.textContent = liveOn ? 'Refresh Live' : 'Refresh Snapshot';
+                    }
+
+                    if (liveModeHint) {
+                        liveModeHint.textContent = liveOn
+                            ? `Direct live playback is active with a ${liveOffsetSeconds}s buffer. Refresh uses a smooth rejoin buffer.`
+                            : 'Frozen DVR snapshot mode. Scrub freely, then refresh for newest data.';
+                    }
+                }
+
+                updateChatSyncMode(liveOffsetSeconds);
+            };
+
+            const seekNearNewestBuffered = (offsetSeconds = liveOffsetSeconds) => {
+                const mediaEnd = getMediaEnd();
+
+                if (!Number.isFinite(mediaEnd) || mediaEnd <= 0) {
+                    return false;
+                }
+
+                const targetTime = Math.max(mediaEnd - Math.max(offsetSeconds, 0), 0);
+                try {
+                    player.currentTime = targetTime;
+                } catch (_error) {
+                    return false;
+                }
+
+                return true;
+            };
+
+            const startNearLiveEdge = (offsetSeconds = liveOffsetSeconds) => {
+                let attempt = 0;
+                const trySeek = () => {
+                    attempt += 1;
+                    const success = seekNearNewestBuffered(offsetSeconds);
+                    if (success || attempt >= maxInitialSeekAttempts) {
+                        tryPlay();
+                        return;
+                    }
+
+                    window.setTimeout(trySeek, 350);
+                };
+
+                trySeek();
+            };
+
+            const switchToDirectLive = (jumpClosestToLiveEdge = false) => {
+                const liveUrl = buildLiveMediaUrl();
+                inDvrMode = false;
+                const loaded = loadSource(liveUrl, () => {
+                    startNearLiveEdge(jumpClosestToLiveEdge ? calculateSmoothBufferSeconds() : liveOffsetSeconds);
+                    lastProgressAt = Date.now();
+                    lastProgressTime = player.currentTime;
+                    updateModeControls();
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                });
+
+                if (!loaded) {
+                    updateModeControls();
+                }
+            };
+
+            const switchToDvrMode = (targetTime, options = {}) => {
+                const dvrUrl = buildLiveMediaUrl({ dvrKey: createLiveDvrKey() });
+                if (!dvrUrl) {
+                    return;
+                }
+
+                const forcePlay = Boolean(options.forcePlay);
+                inDvrMode = true;
+                const desiredTime = Number.isFinite(targetTime) ? Math.max(targetTime, 0) : Math.max(player.currentTime, 0);
+                const loaded = loadSource(dvrUrl, (wasPaused) => {
+                    try {
+                        player.currentTime = desiredTime;
+                    } catch (_error) {
+                        // Ignore seek errors caused by transient metadata gaps.
+                    }
+
+                    if (!wasPaused || forcePlay) {
+                        tryPlay();
+                    }
+
+                    lastProgressAt = Date.now();
+                    lastProgressTime = player.currentTime;
+                    updateModeControls();
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                });
+
+                if (!loaded) {
+                    inDvrMode = false;
+                    updateModeControls();
+                }
+            };
+
+            const maybeAutoRefreshLive = () => {
+                if (inDvrMode || liveRefreshInFlight) {
+                    return;
+                }
+
+                const now = Date.now();
+                if (now - lastAutoLiveRefreshAt < liveAutoRefreshCooldownMs) {
+                    return;
+                }
+
+                const mediaEnd = getMediaEnd();
+                const nearLiveEdge = Number.isFinite(mediaEnd)
+                    ? (mediaEnd - player.currentTime) <= liveEdgeDetectionSeconds
+                    : false;
+                const stalledAtEdge = !player.paused && nearLiveEdge && (now - lastProgressAt >= liveStallThresholdMs);
+                const finishedAtEdge = player.ended && nearLiveEdge;
+                if (!stalledAtEdge && !finishedAtEdge) {
+                    return;
+                }
+
+                liveRefreshInFlight = true;
+                lastAutoLiveRefreshAt = now;
+
+                const loaded = loadSource(buildLiveMediaUrl(), () => {
+                    startNearLiveEdge(calculateSmoothBufferSeconds());
+                    lastProgressAt = Date.now();
+                    lastProgressTime = player.currentTime;
+                    liveRefreshInFlight = false;
+                    updateModeControls();
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                });
+
+                if (!loaded) {
+                    liveRefreshInFlight = false;
+                }
+            };
+
+            setLiveOffsetSeconds(readPersistedLiveOffsetSeconds(), false);
+            setChatOffsetSeconds(readPersistedChatOffsetSeconds(), false);
+            applyLayoutState();
+            updateModeControls();
+
+            if (isLive) {
+                switchToDirectLive();
+            }
+
+            void syncChatTimeline(liveOffsetSeconds, true);
+            startChatPolling(() => liveOffsetSeconds);
+
+            player.addEventListener('playing', () => {
+                lastProgressAt = Date.now();
+                lastProgressTime = player.currentTime;
+                setNormalModeChatHeight();
+                updateModeControls();
+                void syncChatTimeline(liveOffsetSeconds, true);
+            });
+
+            player.addEventListener('timeupdate', () => {
+                if (!Number.isFinite(lastProgressTime) || player.currentTime > (lastProgressTime + 0.1)) {
+                    lastProgressAt = Date.now();
+                }
+                lastProgressTime = player.currentTime;
+
+                if (isLive && !inDvrMode) {
+                    maybeAutoRefreshLive();
+                }
+
+                if (!isLive || inDvrMode) {
+                    void syncChatTimeline(liveOffsetSeconds);
+                }
+            });
+
+            player.addEventListener('seeking', () => {
+                void syncChatTimeline(liveOffsetSeconds, true);
+            });
+
+            player.addEventListener('seeked', () => {
+                void syncChatTimeline(liveOffsetSeconds, true);
+            });
+
+            player.addEventListener('pause', () => {
+                void syncChatTimeline(liveOffsetSeconds, true);
+            });
+
+            player.addEventListener('waiting', () => {
+                if (isLive && !inDvrMode) {
+                    maybeAutoRefreshLive();
+                }
+
+                void syncChatTimeline(liveOffsetSeconds);
+            });
+
+            player.addEventListener('stalled', () => {
+                if (isLive && !inDvrMode) {
+                    maybeAutoRefreshLive();
+                }
+
+                void syncChatTimeline(liveOffsetSeconds);
+            });
+
+            player.addEventListener('ended', () => {
+                if (isLive && !inDvrMode) {
+                    maybeAutoRefreshLive();
+                } else if (isLive && inDvrMode) {
+                    const now = Date.now();
+                    if (now - lastAutoDvrRefreshAt >= dvrAutoRefreshCooldownMs) {
+                        lastAutoDvrRefreshAt = now;
+                        switchToDvrMode(player.currentTime, { forcePlay: true });
+                    }
+                }
+
+                void syncChatTimeline(liveOffsetSeconds, true);
+            });
+
+            if (isLive) {
+                window.setInterval(() => {
+                    if (!inDvrMode) {
+                        maybeAutoRefreshLive();
+                    }
+                }, livePullCheckIntervalMs);
+            }
+
+            if (liveModeToggleButton) {
+                liveModeToggleButton.addEventListener('click', () => {
+                    liveModeToggleButton.disabled = true;
+
+                    if (inDvrMode) {
+                        switchToDirectLive();
+                    } else {
+                        switchToDvrMode(player.currentTime);
+                    }
+
+                    void syncChatTimeline(liveOffsetSeconds, true);
+
+                    window.setTimeout(() => {
+                        liveModeToggleButton.disabled = false;
+                    }, 350);
+                });
+            }
+
+            if (refreshButton) {
+                refreshButton.addEventListener('click', () => {
+                    refreshButton.disabled = true;
+
+                    if (inDvrMode) {
+                        switchToDvrMode(player.currentTime);
+                    } else {
+                        switchToDirectLive(true);
+                    }
+
+                    void syncChatTimeline(liveOffsetSeconds, true);
+
+                    window.setTimeout(() => {
+                        refreshButton.disabled = false;
+                    }, 350);
+                });
+            }
+
+            if (liveBufferSlider) {
+                liveBufferSlider.addEventListener('input', () => {
+                    setLiveOffsetSeconds(liveBufferSlider.value);
+                    updateModeControls();
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                });
+
+                liveBufferSlider.addEventListener('change', () => {
+                    if (!inDvrMode) {
+                        seekNearNewestBuffered(liveOffsetSeconds);
+                        maybeAutoRefreshLive();
+                    }
+
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                });
+            }
+
+            if (liveBufferInput) {
+                const applyLiveBufferInput = (seekWhenLive = false) => {
+                    const rawValue = String(liveBufferInput.value ?? '').trim();
+                    if (rawValue === '') {
+                        setLiveOffsetSeconds(liveOffsetSecondsDefault);
+                        highlightDefaultedInput(liveBufferInput);
+                        updateModeControls();
+
+                        if (seekWhenLive && !inDvrMode) {
+                            seekNearNewestBuffered(liveOffsetSeconds);
+                            maybeAutoRefreshLive();
+                        }
+
+                        void syncChatTimeline(liveOffsetSeconds, true);
+                        return;
+                    }
+
+                    const parsed = Number.parseInt(rawValue, 10);
+                    if (!Number.isFinite(parsed)) {
+                        liveBufferInput.value = String(liveOffsetSeconds);
+                        return;
+                    }
+
+                    setLiveOffsetSeconds(parsed);
+                    updateModeControls();
+
+                    if (seekWhenLive && !inDvrMode) {
+                        seekNearNewestBuffered(liveOffsetSeconds);
+                        maybeAutoRefreshLive();
+                    }
+
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                };
+
+                liveBufferInput.addEventListener('input', () => {
+                    applyLiveBufferInput(false);
+                });
+
+                liveBufferInput.addEventListener('change', () => {
+                    applyLiveBufferInput(true);
+                });
+
+                liveBufferInput.addEventListener('blur', () => {
+                    applyLiveBufferInput(false);
+                });
+            }
+
+            if (chatOffsetSlider) {
+                chatOffsetSlider.addEventListener('input', () => {
+                    setChatOffsetSeconds(chatOffsetSlider.value);
+                    updateModeControls();
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                });
+
+                chatOffsetSlider.addEventListener('change', () => {
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                });
+            }
+
+            if (chatOffsetInput) {
+                const applyChatOffsetInput = () => {
+                    const rawValue = String(chatOffsetInput.value ?? '').trim();
+                    if (rawValue === '') {
+                        setChatOffsetSeconds(chatOffsetSecondsDefault);
+                        highlightDefaultedInput(chatOffsetInput);
+                        updateModeControls();
+                        void syncChatTimeline(liveOffsetSeconds, true);
+                        return;
+                    }
+
+                    const parsed = Number.parseInt(rawValue, 10);
+                    if (!Number.isFinite(parsed)) {
+                        chatOffsetInput.value = String(chatOffsetSeconds);
+                        return;
+                    }
+
+                    setChatOffsetSeconds(parsed);
+                    updateModeControls();
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                };
+
+                chatOffsetInput.addEventListener('input', applyChatOffsetInput);
+                chatOffsetInput.addEventListener('change', applyChatOffsetInput);
+                chatOffsetInput.addEventListener('blur', applyChatOffsetInput);
+            }
+
+            window.addEventListener('beforeunload', stopChatPolling);
+        })();
+    </script>
+</body>
+</html>

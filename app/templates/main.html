@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#141414">
+    <meta name="application-name" content="VStreamware">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="VStreamware">
+    <title>VStreamware</title>
+    <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16x16.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <main class="container">
+        <header class="page-header browser-header">
+            <h1 class="app-title">
+                <a class="app-title-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
+                    <img class="app-title-icon" src="{{ url_for('static', filename='icons/icon-64.png') }}" alt="VStreamware icon">
+                    <span>VStreamware</span>
+                </a>
+            </h1>
+            <div class="header-actions">
+                <a class="button-link" href="{{ url_for('dashboard.settings') }}">Settings</a>
+                <form action="{{ url_for('dashboard.clear_cache') }}" method="post" class="header-action-form" onsubmit="return window.confirm('Clear all cached thumbnails and transcoded videos?');">
+                    <button type="submit" class="button-link button-link-danger">Clear Cache</button>
+                </form>
+            </div>
+            <p>Browse recordings in an icon grid. Click any card to open a dedicated single-video page.</p>
+        </header>
+
+        <div class="mobile-panel-controls" aria-label="Panel controls">
+            {% include 'partials/saved_panel_toggle_button.html' %}
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <section class="messages">
+                    {% for category, message in messages %}
+                        <div class="message {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        <div class="browser-layout">
+            {% include 'partials/saved_channels_panel.html' %}
+
+            <section class="browser-main-column">
+                <section class="card video-browser-card">
+                    <div class="video-browser-header">
+                        <h2>Video Browser</h2>
+                        <button type="button" class="secondary" id="refresh-video-browser">Refresh</button>
+                    </div>
+                    <p class="muted">Newest videos are shown first by default. Filter by channel or day to browse specific folders.</p>
+
+                    <form class="video-browser-filters" id="video-browser-filters" onsubmit="return false;">
+                        <label class="video-filter-field">
+                            <span>Sort</span>
+                            <select id="video-sort">
+                                <option value="desc" selected>Newest first</option>
+                                <option value="asc">Oldest first</option>
+                            </select>
+                        </label>
+                        <label class="video-filter-field">
+                            <span>Channel</span>
+                            <select id="video-channel">
+                                <option value="all">All channels</option>
+                            </select>
+                        </label>
+                        <label class="video-filter-field">
+                            <span>Day</span>
+                            <select id="video-day">
+                                <option value="all">All days</option>
+                            </select>
+                        </label>
+                    </form>
+
+                    <p class="muted sync-status" id="video-browser-sync-status">Video index connecting...</p>
+
+                    <section class="video-section">
+                        <h3>Live Videos</h3>
+                        <div id="live-video-list" class="video-grid"></div>
+                        <p id="live-video-empty" class="muted">No live recordings right now.</p>
+                    </section>
+
+                    <section class="video-section">
+                        <h3>All Recordings</h3>
+                        <div id="recorded-video-list" class="video-grid"></div>
+                        <p id="recorded-video-empty" class="muted">No recordings match this filter.</p>
+                    </section>
+                </section>
+
+                <section class="card browser-placeholder" id="video-browser-loading" aria-hidden="true">
+                    <h2>Loading Video Index</h2>
+                    <div class="placeholder-grid" aria-hidden="true">
+                        <div class="placeholder-card"></div>
+                        <div class="placeholder-card"></div>
+                        <div class="placeholder-card"></div>
+                        <div class="placeholder-card"></div>
+                    </div>
+                </section>
+            </section>
+        </div>
+    </main>
+
+    {% include 'partials/panel_overlay.html' %}
+
+    <script src="{{ url_for('static', filename='panel_controls.js') }}" defer></script>
+    <script>
+        (() => {
+            const recordingsIndexUrl = "{{ url_for('dashboard.recordings_index') }}";
+            const displayTimezonePreference = {{ display_timezone | tojson }};
+
+            const filterSort = document.getElementById('video-sort');
+            const filterChannel = document.getElementById('video-channel');
+            const filterDay = document.getElementById('video-day');
+            const refreshBrowserButton = document.getElementById('refresh-video-browser');
+            const liveVideoList = document.getElementById('live-video-list');
+            const recordedVideoList = document.getElementById('recorded-video-list');
+            const liveVideoEmpty = document.getElementById('live-video-empty');
+            const recordedVideoEmpty = document.getElementById('recorded-video-empty');
+            const browserSyncStatus = document.getElementById('video-browser-sync-status');
+            const browserLoading = document.getElementById('video-browser-loading');
+            const fallbackThumbUrl = "{{ url_for('static', filename='icons/icon-64.png') }}";
+
+            let allRecordings = [];
+            let channelDays = {};
+            let browserSignature = '';
+            let browserPollTimer = null;
+            let browserRequestInFlight = false;
+
+            const setBrowserStatus = (text, isError = false) => {
+                if (!browserSyncStatus) {
+                    return;
+                }
+
+                browserSyncStatus.textContent = text;
+                browserSyncStatus.classList.toggle('is-error', isError);
+            };
+
+            const escapeHtml = (value) => {
+                const text = String(value ?? '');
+                return text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            };
+
+            const formatBytes = (bytesValue) => {
+                const bytes = Number(bytesValue);
+                if (!Number.isFinite(bytes) || bytes <= 0) {
+                    return '0 B';
+                }
+
+                const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                const unitIndex = Math.min(
+                    Math.floor(Math.log(bytes) / Math.log(1024)),
+                    units.length - 1
+                );
+                const scaled = bytes / Math.pow(1024, unitIndex);
+                const decimals = unitIndex === 0 ? 0 : 1;
+                return `${scaled.toFixed(decimals)} ${units[unitIndex]}`;
+            };
+
+            const formatDateTime = (isoString, unixSeconds) => {
+                let date = null;
+                if (typeof isoString === 'string' && isoString.trim()) {
+                    const parsed = new Date(isoString);
+                    if (!Number.isNaN(parsed.getTime())) {
+                        date = parsed;
+                    }
+                }
+
+                if (!date && Number.isFinite(Number(unixSeconds)) && Number(unixSeconds) > 0) {
+                    date = new Date(Number(unixSeconds) * 1000);
+                }
+
+                if (!date) {
+                    return 'Unknown';
+                }
+
+                let timezone;
+                if (typeof displayTimezonePreference === 'string' && displayTimezonePreference && displayTimezonePreference !== 'auto') {
+                    timezone = displayTimezonePreference;
+                } else {
+                    try {
+                        timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    } catch (_error) {
+                        timezone = undefined;
+                    }
+                }
+
+                try {
+                    return date.toLocaleString(undefined, timezone ? { timeZone: timezone } : undefined);
+                } catch (_error) {
+                    return date.toLocaleString();
+                }
+            };
+
+            const populateChannelOptions = (channels) => {
+                if (!filterChannel) {
+                    return;
+                }
+
+                const previousValue = filterChannel.value || 'all';
+                filterChannel.innerHTML = '';
+
+                const allOption = document.createElement('option');
+                allOption.value = 'all';
+                allOption.textContent = 'All channels';
+                filterChannel.appendChild(allOption);
+
+                const uniqueChannels = Array.isArray(channels)
+                    ? Array.from(new Set(channels.map((item) => String(item))))
+                    : [];
+                uniqueChannels.sort((left, right) => left.localeCompare(right));
+
+                for (const channel of uniqueChannels) {
+                    const option = document.createElement('option');
+                    option.value = channel;
+                    option.textContent = channel;
+                    filterChannel.appendChild(option);
+                }
+
+                const hasPrevious = uniqueChannels.includes(previousValue);
+                filterChannel.value = hasPrevious ? previousValue : 'all';
+            };
+
+            const populateDayOptions = () => {
+                if (!filterChannel || !filterDay) {
+                    return;
+                }
+
+                const previousValue = filterDay.value || 'all';
+                const selectedChannel = filterChannel.value || 'all';
+                const daySet = new Set();
+
+                if (selectedChannel === 'all') {
+                    for (const days of Object.values(channelDays)) {
+                        if (!Array.isArray(days)) {
+                            continue;
+                        }
+                        for (const day of days) {
+                            daySet.add(String(day));
+                        }
+                    }
+                } else {
+                    const selectedDays = channelDays[selectedChannel];
+                    if (Array.isArray(selectedDays)) {
+                        for (const day of selectedDays) {
+                            daySet.add(String(day));
+                        }
+                    }
+                }
+
+                const dayValues = Array.from(daySet).sort((left, right) => right.localeCompare(left));
+                filterDay.innerHTML = '';
+
+                const allOption = document.createElement('option');
+                allOption.value = 'all';
+                allOption.textContent = 'All days';
+                filterDay.appendChild(allOption);
+
+                for (const day of dayValues) {
+                    const option = document.createElement('option');
+                    option.value = day;
+                    option.textContent = day;
+                    filterDay.appendChild(option);
+                }
+
+                const hasPrevious = dayValues.includes(previousValue);
+                filterDay.value = hasPrevious ? previousValue : 'all';
+            };
+
+            const sortRecordings = (items) => {
+                const sorted = [...items].sort((left, right) => {
+                    const leftTime = Number(left.recorded_at_unix) || 0;
+                    const rightTime = Number(right.recorded_at_unix) || 0;
+                    if (leftTime !== rightTime) {
+                        return leftTime - rightTime;
+                    }
+
+                    return String(left.relative_path || '').localeCompare(String(right.relative_path || ''));
+                });
+
+                const direction = filterSort ? filterSort.value : 'desc';
+                if (direction === 'desc') {
+                    sorted.reverse();
+                }
+
+                return sorted;
+            };
+
+            const buildVideoItemMarkup = (recording) => {
+                const channel = escapeHtml(recording.channel || 'unknown');
+                const day = escapeHtml(recording.day || 'unknown');
+                const title = escapeHtml(recording.display_title || recording.file_name || 'stream');
+                const quality = recording.quality ? `<span class="meta-chip">Quality ${escapeHtml(recording.quality)}</span>` : '';
+                const startedAt = recording.started_at
+                    ? formatDateTime(recording.started_at, recording.recorded_at_unix)
+                    : formatDateTime(recording.recorded_at, recording.recorded_at_unix);
+                const liveBadge = recording.is_live ? '<span class="badge live">LIVE</span>' : '<span class="badge neutral">Recorded</span>';
+                const thumbnailUrl = escapeHtml(recording.thumbnail_url || fallbackThumbUrl);
+                const viewUrl = escapeHtml(String(recording.view_url || '#'));
+                const openLabel = recording.can_play ? 'Open video' : 'Open details';
+
+                return `
+                    <article class="video-item ${recording.is_live ? 'is-live' : ''}">
+                        <a class="video-card-link" href="${viewUrl}" aria-label="Open ${title}">
+                            <p class="video-channel-label">${channel}</p>
+                            <div class="video-thumb-wrap">
+                                <img class="video-thumb" src="${thumbnailUrl}" alt="${title} thumbnail" loading="lazy" decoding="async">
+                                <span class="video-open-indicator">${openLabel}</span>
+                            </div>
+                            <header class="video-item-header">
+                                <div>
+                                    <h4>${title}</h4>
+                                    <p class="muted">${day}</p>
+                                </div>
+                                <div class="video-item-badges">
+                                    ${liveBadge}
+                                    ${quality}
+                                </div>
+                            </header>
+                            <dl class="video-meta-grid">
+                                <div>
+                                    <dt>Recorded</dt>
+                                    <dd>${escapeHtml(startedAt)}</dd>
+                                </div>
+                                <div>
+                                    <dt>Size</dt>
+                                    <dd>${escapeHtml(formatBytes(recording.size_bytes))}</dd>
+                                </div>
+                            </dl>
+                        </a>
+                    </article>
+                `;
+            };
+
+            const renderVideoLists = () => {
+                if (!liveVideoList || !recordedVideoList || !liveVideoEmpty || !recordedVideoEmpty) {
+                    return;
+                }
+
+                const selectedChannel = filterChannel ? filterChannel.value : 'all';
+                const selectedDay = filterDay ? filterDay.value : 'all';
+
+                const filtered = allRecordings.filter((item) => {
+                    const channelMatch = selectedChannel === 'all' || item.channel === selectedChannel;
+                    const dayMatch = selectedDay === 'all' || item.day === selectedDay;
+                    return channelMatch && dayMatch;
+                });
+
+                const liveItems = sortRecordings(filtered.filter((item) => Boolean(item.is_live)));
+                const recordedItems = sortRecordings(filtered.filter((item) => !item.is_live));
+
+                liveVideoList.innerHTML = liveItems.map(buildVideoItemMarkup).join('');
+                recordedVideoList.innerHTML = recordedItems.map(buildVideoItemMarkup).join('');
+
+                liveVideoEmpty.hidden = liveItems.length > 0;
+                recordedVideoEmpty.hidden = recordedItems.length > 0;
+            };
+
+            const applyRecordingsPayload = (payload) => {
+                const recordings = Array.isArray(payload.recordings) ? payload.recordings : [];
+                allRecordings = recordings.map((item) => ({
+                    channel: String(item.channel || ''),
+                    day: String(item.day || ''),
+                    file_name: String(item.file_name || ''),
+                    display_title: String(item.display_title || ''),
+                    relative_path: String(item.relative_path || ''),
+                    media_url: String(item.media_url || ''),
+                    thumbnail_url: String(item.thumbnail_url || ''),
+                    view_url: String(item.view_url || ''),
+                    recorded_at: typeof item.recorded_at === 'string' ? item.recorded_at : '',
+                    recorded_at_unix: Number(item.recorded_at_unix) || 0,
+                    size_bytes: Number(item.size_bytes) || 0,
+                    is_live: Boolean(item.is_live),
+                    can_play: Boolean(item.can_play),
+                    quality: item.quality ? String(item.quality) : '',
+                    started_at: item.started_at ? String(item.started_at) : '',
+                }));
+
+                channelDays = (payload.channel_days && typeof payload.channel_days === 'object')
+                    ? payload.channel_days
+                    : {};
+
+                populateChannelOptions(Array.isArray(payload.channels) ? payload.channels : []);
+                populateDayOptions();
+                renderVideoLists();
+
+                if (browserLoading) {
+                    browserLoading.hidden = true;
+                }
+            };
+
+            const fetchVideoBrowser = async ({ force = false } = {}) => {
+                if (browserRequestInFlight) {
+                    return;
+                }
+
+                browserRequestInFlight = true;
+
+                try {
+                    const response = await fetch(recordingsIndexUrl, {
+                        cache: 'no-store',
+                        headers: {
+                            'X-Requested-With': 'vstreamware-video-browser',
+                        },
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`status ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    const nextSignature = typeof payload.signature === 'string' ? payload.signature : '';
+                    const sameSignature = Boolean(nextSignature && nextSignature === browserSignature);
+
+                    if (!force && sameSignature) {
+                        setBrowserStatus('Video index connected.');
+                        return;
+                    }
+
+                    browserSignature = nextSignature || browserSignature;
+                    applyRecordingsPayload(payload);
+                    setBrowserStatus('Video index connected.');
+                } catch (error) {
+                    console.error('Video index sync failed:', error);
+                    setBrowserStatus('Video index retrying...', true);
+                } finally {
+                    browserRequestInFlight = false;
+                }
+            };
+
+            const startBrowserPolling = () => {
+                if (browserPollTimer !== null) {
+                    return;
+                }
+
+                browserPollTimer = window.setInterval(() => {
+                    fetchVideoBrowser();
+                }, 5000);
+            };
+
+            const stopBrowserPolling = () => {
+                if (browserPollTimer === null) {
+                    return;
+                }
+
+                window.clearInterval(browserPollTimer);
+                browserPollTimer = null;
+            };
+
+            if (filterChannel) {
+                filterChannel.addEventListener('change', () => {
+                    populateDayOptions();
+                    renderVideoLists();
+                });
+            }
+
+            if (filterDay) {
+                filterDay.addEventListener('change', renderVideoLists);
+            }
+
+            if (filterSort) {
+                filterSort.addEventListener('change', renderVideoLists);
+            }
+
+            if (refreshBrowserButton) {
+                refreshBrowserButton.addEventListener('click', () => {
+                    fetchVideoBrowser({ force: true });
+                });
+            }
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    stopBrowserPolling();
+                    return;
+                }
+
+                fetchVideoBrowser();
+                startBrowserPolling();
+            });
+
+            window.addEventListener('beforeunload', stopBrowserPolling);
+
+            fetchVideoBrowser({ force: true });
+            startBrowserPolling();
+        })();
+    </script>
+</body>
+</html>
