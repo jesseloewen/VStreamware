@@ -9,3 +9,4 @@ __pycache__/
 recordings/
 recording_settings.json
 .cache/
+data/

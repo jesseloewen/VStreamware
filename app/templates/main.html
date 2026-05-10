@@ -26,9 +26,6 @@
             </h1>
             <div class="header-actions">
                 <a class="button-link" href="{{ url_for('dashboard.settings') }}">Settings</a>
-                <form action="{{ url_for('dashboard.clear_cache') }}" method="post" class="header-action-form" onsubmit="return window.confirm('Clear all cached thumbnails and transcoded videos?');">
-                    <button type="submit" class="button-link button-link-danger">Clear Cache</button>
-                </form>
             </div>
             <p>Browse recordings in an icon grid. Click any card to open a dedicated single-video page.</p>
         </header>

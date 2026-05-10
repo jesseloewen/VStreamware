@@ -547,6 +547,19 @@ button.danger {
     background: #b31a27;
 }
 
+.cache-size-indicator {
+    margin-left: 8px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.32);
+    background: rgba(8, 12, 18, 0.28);
+    color: #fff7ed;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
 .panel-hamburger {
     display: inline-flex;
     align-items: center;
@@ -1030,25 +1043,51 @@ button.danger {
 }
 
 .video-time-toggle.is-toggleable {
+    padding: 4px 6px;
+    border-color: #406081;
+    background: #1f3248;
     cursor: pointer;
 }
 
 .video-time-inline-total {
-    border: 1px solid transparent;
+    border: 1px solid #406081;
     border-radius: 8px;
+    background: #1f3248;
     line-height: 1.2;
-    padding: 0;
+    padding: 4px 6px;
+    position: relative;
 }
 
 .video-time-inline-total::before {
     content: "/";
-    display: inline-block;
-    margin: 0 6px;
+    position: absolute;
+    left: -10px;
+    top: 50%;
+    transform: translate(-50%, -50%);
     color: #dbeafe;
+    pointer-events: none;
 }
 
 .video-time-inline-total[hidden] {
     display: none !important;
+}
+
+.video-progress-row.is-direct-live {
+    --live-time-chip-gap: 18px;
+}
+
+.video-progress-row.is-direct-live .video-progress-start {
+    gap: var(--live-time-chip-gap);
+}
+
+.video-progress-row.is-direct-live .video-progress-start .video-time-toggle.is-toggleable,
+.video-progress-row.is-direct-live .video-progress-start .video-time-inline-total {
+    width: var(--live-time-chip-width, auto);
+    min-width: var(--live-time-chip-width, auto);
+}
+
+.video-progress-row.is-direct-live .video-progress-start .video-time-inline-total::before {
+    left: calc(var(--live-time-chip-gap) * -0.5);
 }
 
 .video-time-toggle:focus-visible {
@@ -1083,7 +1122,7 @@ button.danger {
 .live-refresh-snapshot-button {
     width: 32px;
     height: 32px;
-    padding: 0;
+    padding: 8px;
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
@@ -1156,7 +1195,6 @@ button.danger {
 .player-live-inline-controls .live-buffer-control input[type="range"] {
     flex: 1 1 auto;
     width: 100%;
-    max-width: 200px;
     min-width: 0;
 }
 
@@ -1701,6 +1739,40 @@ button.danger {
     font-size: 11px;
     border-color: #4b6a8f;
     background: #1f3248;
+}
+
+.video-chat-footer-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.video-chat-footer-controls .chat-jump-latest {
+    align-self: auto;
+}
+
+.chat-sync-source-wrap {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.chat-sync-mode-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #bfd6ef;
+    white-space: nowrap;
+}
+
+.chat-sync-toggle {
+    gap: 6px;
+}
+
+.chat-sync-toggle .toggle-label {
+    min-width: 62px;
 }
 
 .chat-jump-latest:hover,
@@ -2349,9 +2421,20 @@ th {
         gap: 8px;
     }
 
+    .video-chat-footer-controls {
+        gap: 8px;
+        align-items: flex-start;
+    }
+
     .chat-jump-latest {
         width: auto;
-        align-self: stretch;
+        align-self: auto;
+    }
+
+    .chat-sync-source-wrap {
+        margin-left: 0;
+        width: 100%;
+        justify-content: flex-end;
     }
 
     .live-buffer-control input[type="number"] {
@@ -2758,7 +2841,6 @@ th {
 
     .player-live-inline-controls .live-buffer-control input[type="range"] {
         width: 100%;
-        max-width: 148px;
         min-width: 0;
     }
 
@@ -2847,7 +2929,7 @@ th {
     }
 
     .video-progress-row.is-direct-live .player-live-inline-controls .live-buffer-control input[type="range"] {
-        max-width: 220px;
+        max-width: none;
     }
 }
 

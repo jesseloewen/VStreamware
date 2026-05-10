@@ -21,18 +21,32 @@ def _env_bool(key: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_str(key: str, default: str) -> str:
+    value = os.getenv(key)
+    if value is None:
+        return default
+
+    normalized = value.strip()
+    if not normalized:
+        return default
+
+    return normalized
+
+
 class Config:
     BASE_DIR = Path(__file__).resolve().parent.parent
+    DATA_DIR = BASE_DIR / "data"
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
     STREAMLINK_COMMAND = os.getenv("STREAMLINK_COMMAND", "streamlink")
     FFMPEG_COMMAND = os.getenv("FFMPEG_COMMAND", "ffmpeg")
-    VIDEO_THUMBNAIL_CACHE_DIR = os.getenv(
+    CACHE_DIR = _env_str("CACHE_DIR", str(DATA_DIR / "cache"))
+    VIDEO_THUMBNAIL_CACHE_DIR = _env_str(
         "VIDEO_THUMBNAIL_CACHE_DIR",
-        str(BASE_DIR / ".cache" / "video-thumbnails"),
+        str(Path(CACHE_DIR) / "video-thumbnails"),
     )
-    VIDEO_TRANSCODE_CACHE_DIR = os.getenv(
+    VIDEO_TRANSCODE_CACHE_DIR = _env_str(
         "VIDEO_TRANSCODE_CACHE_DIR",
-        str(BASE_DIR / ".cache" / "video-transcodes"),
+        str(Path(CACHE_DIR) / "video-transcodes"),
     )
     VIDEO_THUMBNAIL_WIDTH = _env_int("VIDEO_THUMBNAIL_WIDTH", 480)
     VIDEO_THUMBNAIL_HEIGHT = _env_int("VIDEO_THUMBNAIL_HEIGHT", 270)
@@ -48,10 +62,10 @@ class Config:
         "https://api.pushover.net/1/messages.json",
     )
     PUSHOVER_TIMEOUT_SECONDS = _env_int("PUSHOVER_TIMEOUT_SECONDS", 5)
-    RECORDINGS_DIR = os.getenv("RECORDINGS_DIR", str(BASE_DIR / "recordings"))
-    STREAM_SETTINGS_FILE = os.getenv(
+    RECORDINGS_DIR = _env_str("RECORDINGS_DIR", str(DATA_DIR / "recordings"))
+    STREAM_SETTINGS_FILE = _env_str(
         "STREAM_SETTINGS_FILE",
-        str(BASE_DIR / "recording_settings.json"),
+        str(DATA_DIR / "recording_settings.json"),
     )
     AUTO_RECORD_POLL_SECONDS = _env_int("AUTO_RECORD_POLL_SECONDS", 30)
     TWITCH_CHAT_CAPTURE_ENABLED = _env_bool("TWITCH_CHAT_CAPTURE_ENABLED", True)

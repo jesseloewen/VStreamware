@@ -26,9 +26,6 @@
             </h1>
             <div class="header-actions">
                 <a class="button-link" href="{{ url_for('dashboard.index') }}">Home</a>
-                <form action="{{ url_for('dashboard.clear_cache') }}" method="post" class="header-action-form" onsubmit="return window.confirm('Clear all cached thumbnails and transcoded videos?');">
-                    <button type="submit" class="button-link button-link-danger">Clear Cache</button>
-                </form>
             </div>
             <p>Twitch recording dashboard with saved channels and per-channel auto recording.</p>
         </header>
@@ -78,6 +75,14 @@
                             <option value="Asia/Tokyo" {% if display_timezone == 'Asia/Tokyo' %}selected{% endif %}>Asia/Tokyo</option>
                         </select>
                         <button type="submit" class="secondary">Save</button>
+                    </form>
+                </section>
+
+                <section class="card">
+                    <h2>Cache</h2>
+                    <p class="muted">Current cache usage: <strong>{{ cache_summary.total_size_label }}</strong> across {{ cache_summary.total_files }} files.</p>
+                    <form action="{{ url_for('dashboard.clear_cache') }}" method="post" class="inline-form" onsubmit="return window.confirm('Clear all cached thumbnails and transcoded videos?');">
+                        <button type="submit" class="danger">Clear Cache</button>
                     </form>
                 </section>
 

@@ -61,7 +61,7 @@
                             <div class="video-detail-player-column">
                                 <div class="video-detail-player-wrap" id="video-player-shell">
                                     <div class="video-player-stage" id="video-player-stage">
-                                        <video id="detail-video" preload="auto" src="{{ recording.media_url }}"{% if recording.is_live %} playsinline{% endif %}></video>
+                                        <video id="detail-video" preload="auto" data-media-url="{{ recording.media_url }}"{% if recording.is_live %} playsinline{% endif %}></video>
                                         <div class="video-center-toggle-anchor" id="center-toggle-anchor" aria-hidden="true"></div>
                                         <div class="video-gesture-layer" id="video-gesture-layer" aria-live="polite" aria-atomic="true">
                                             <span class="video-gesture-hint is-back" id="video-gesture-back" hidden>-10s</span>
@@ -205,7 +205,19 @@
                                 </header>
                                 <p class="muted sync-status" id="chat-sync-status">Connecting to chat timeline...</p>
                                 <div class="video-chat-list" id="video-chat-list"></div>
-                                <button type="button" class="button-link chat-jump-latest" id="chat-jump-latest" hidden>Jump To Latest</button>
+                                <div class="video-chat-footer-controls">
+                                    <button type="button" class="button-link chat-jump-latest" id="chat-jump-latest" hidden>Jump To Latest</button>
+                                    {% if recording.is_live %}
+                                        <div class="chat-sync-source-wrap" role="group" aria-label="Chat sync source">
+                                            <span id="chat-sync-mode" class="muted chat-sync-mode-label">Playback Chat</span>
+                                            <label class="toggle-switch chat-sync-toggle" for="chat-sync-source-toggle">
+                                                <input id="chat-sync-source-toggle" type="checkbox" role="switch" aria-label="Toggle live chat synchronization">
+                                                <span class="toggle-slider" aria-hidden="true"></span>
+                                                <span id="chat-sync-source-label" class="toggle-label">Playback</span>
+                                            </label>
+                                        </div>
+                                    {% endif %}
+                                </div>
                             </aside>
                         </div>
                     {% else %}
@@ -261,6 +273,7 @@
             const playerVolumePanel = document.getElementById('player-volume-panel');
             const playerVolumeSlider = document.getElementById('player-volume-slider');
             const playbackSpeedToggle = document.getElementById('playback-speed-toggle');
+            const videoSettingsWrap = document.querySelector('.video-settings-wrap');
             const playerSettingsPanel = document.getElementById('player-settings-panel');
             const playerFullscreenToggle = document.getElementById('player-fullscreen-toggle');
             const playerChatRestoreButton = document.getElementById('player-chat-restore');
@@ -273,6 +286,8 @@
             const chatJumpLatestButton = document.getElementById('chat-jump-latest');
             const chatSyncStatus = document.getElementById('chat-sync-status');
             const chatSyncMode = document.getElementById('chat-sync-mode');
+            const chatSyncSourceToggle = document.getElementById('chat-sync-source-toggle');
+            const chatSyncSourceLabel = document.getElementById('chat-sync-source-label');
             const videoDetailContent = document.querySelector('.video-detail-content');
             const videoPlayerWrap = document.querySelector('.video-detail-player-wrap');
             const chatPanel = document.querySelector('.video-chat-panel');
@@ -281,11 +296,13 @@
             const displayTimezonePreference = {{ display_timezone | tojson }};
             const isLive = {{ 'true' if recording.is_live else 'false' }};
             const chatUrl = {{ recording.chat_url | tojson }};
+            const releaseTranscodeUrl = {{ url_for('dashboard.release_transcode_cache') | tojson }};
             let recordingStartUtcMs = {{ recording.recording_start_utc_ms if recording.recording_start_utc_ms is not none else 'null' }};
             const liveOffsetSecondsDefault = {{ live_buffer_default_seconds }};
             const liveOffsetSecondsMin = {{ live_buffer_min_seconds }};
             const liveOffsetSecondsMax = {{ live_buffer_max_seconds }};
             const liveBufferStorageKey = 'vstreamware.live-buffer-seconds';
+            const chatSyncSourceStorageKey = 'vstreamware.chat-sync-source';
             const playbackSpeedStorageKey = 'vstreamware.playback-speed';
             const fullscreenChatModeStorageKey = 'vstreamware.fullscreen-chat-mode';
             const fullscreenSideChatWidthStorageKey = 'vstreamware.fullscreen-side-chat-width';
@@ -300,6 +317,7 @@
             const holdBoostMoveTolerancePx = 22;
             const playerSeekStepSeconds = 0.1;
             let inDvrMode = false;
+            let chatSyncSource = 'playback';
             let highlightedInputTimer = null;
             let isChatAutoFollowEnabled = true;
             const chatAutoFollowBottomThresholdPx = 24;
@@ -1209,20 +1227,87 @@
                 setChatAutoFollow(false);
             };
 
+            const normalizeChatSyncSource = (rawValue) => {
+                const normalized = String(rawValue || '').trim().toLowerCase();
+                return normalized === 'live' ? 'live' : 'playback';
+            };
+
+            const readPersistedChatSyncSource = () => {
+                if (!isLive) {
+                    return 'playback';
+                }
+
+                try {
+                    const rawValue = window.localStorage.getItem(chatSyncSourceStorageKey);
+                    if (!rawValue) {
+                        return 'playback';
+                    }
+
+                    return normalizeChatSyncSource(rawValue);
+                } catch (_error) {
+                    return 'playback';
+                }
+            };
+
+            const isLiveChatSyncSelected = () => Boolean(isLive && chatSyncSource === 'live');
+
+            const updateChatSyncSourceUi = () => {
+                const liveChatSelected = isLiveChatSyncSelected();
+                const isDirectLiveMode = Boolean(isLive && !inDvrMode);
+
+                if (chatSyncSourceToggle) {
+                    chatSyncSourceToggle.checked = liveChatSelected;
+                    chatSyncSourceToggle.setAttribute('aria-checked', liveChatSelected ? 'true' : 'false');
+                    const toggleAria = isDirectLiveMode
+                        ? 'Toggle between absolute live chat and buffered live chat'
+                        : 'Toggle between absolute live chat and playback-synced chat';
+                    chatSyncSourceToggle.setAttribute('aria-label', toggleAria);
+                }
+
+                if (chatSyncSourceLabel) {
+                    if (liveChatSelected) {
+                        chatSyncSourceLabel.textContent = 'Absolute';
+                    } else {
+                        chatSyncSourceLabel.textContent = isDirectLiveMode ? 'Buffered' : 'Playback';
+                    }
+                }
+            };
+
+            const setChatSyncSource = (rawValue, persist = true) => {
+                chatSyncSource = normalizeChatSyncSource(rawValue);
+                updateChatSyncSourceUi();
+
+                if (persist && isLive) {
+                    try {
+                        window.localStorage.setItem(chatSyncSourceStorageKey, chatSyncSource);
+                    } catch (_error) {
+                        // Storage failures should not break playback controls.
+                    }
+                }
+
+                return chatSyncSource;
+            };
+
             const updateChatSyncMode = (liveOffsetSeconds) => {
                 if (!chatSyncMode) {
                     return;
                 }
 
-                if (isLive && !inDvrMode) {
+                if (isLive && isLiveChatSyncSelected()) {
                     chatSyncMode.hidden = false;
-                    chatSyncMode.textContent = `Live (-${liveOffsetSeconds}s)`;
+                    chatSyncMode.textContent = 'Absolute Live Chat';
                     return;
                 }
 
-                if (isLive && inDvrMode) {
+                if (isLive && !inDvrMode) {
                     chatSyncMode.hidden = false;
-                    chatSyncMode.textContent = 'Live Replay';
+                    chatSyncMode.textContent = `Buffered Live Chat (-${liveOffsetSeconds}s)`;
+                    return;
+                }
+
+                if (isLive) {
+                    chatSyncMode.hidden = false;
+                    chatSyncMode.textContent = 'Playback Chat';
                     return;
                 }
 
@@ -1233,6 +1318,11 @@
             const computeChatTargetUtcMs = (liveOffsetSeconds) => {
                 if (!player) {
                     return null;
+                }
+
+                if (isLive && isLiveChatSyncSelected()) {
+                    const baseTargetMs = Date.now();
+                    return baseTargetMs;
                 }
 
                 if (isLive && !inDvrMode) {
@@ -1270,10 +1360,11 @@
 
                 let requestUrl = '';
                 try {
+                    const useLiveChatWindow = Boolean(isLive && (!inDvrMode || isLiveChatSyncSelected()));
                     const url = new URL(chatUrl, window.location.href);
                     url.searchParams.set('target_ms', String(Math.round(targetUtcMs)));
-                    url.searchParams.set('window_ms', String(isLive && !inDvrMode ? 180000 : 120000));
-                    url.searchParams.set('limit', String(isLive && !inDvrMode ? 220 : 180));
+                    url.searchParams.set('window_ms', String(useLiveChatWindow ? 180000 : 120000));
+                    url.searchParams.set('limit', String(useLiveChatWindow ? 220 : 180));
                     requestUrl = url.toString();
                 } catch (_error) {
                     const separator = chatUrl.includes('?') ? '&' : '?';
@@ -1588,6 +1679,15 @@
                 });
             }
 
+            if (chatSyncSourceToggle) {
+                chatSyncSourceToggle.addEventListener('change', () => {
+                    const nextSource = chatSyncSourceToggle.checked ? 'live' : 'playback';
+                    setChatSyncSource(nextSource);
+                    updateChatSyncMode(liveOffsetSeconds);
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                });
+            }
+
             for (const button of chatModeButtons) {
                 button.addEventListener('click', () => {
                     const mode = button.getAttribute('data-chat-mode') || 'side';
@@ -1595,19 +1695,22 @@
                 });
             }
 
-            const mediaBaseUrl = player.getAttribute('src') || '';
+            const mediaBaseUrl = player.getAttribute('data-media-url') || player.getAttribute('src') || '';
             const maxInitialSeekAttempts = 8;
             const livePullCheckIntervalMs = 3000;
             const liveStallThresholdMs = 7000;
             const liveAutoRefreshCooldownMs = 6000;
             const dvrAutoRefreshCooldownMs = 2200;
             const liveEdgeDetectionSeconds = 2.5;
+            let currentTranscodeCacheId = '';
             let liveOffsetSeconds = liveOffsetSecondsDefault;
             let liveRefreshInFlight = false;
             let lastAutoLiveRefreshAt = 0;
             let lastAutoDvrRefreshAt = 0;
             let lastProgressAt = Date.now();
             let lastProgressTime = 0;
+
+            setChatSyncSource(readPersistedChatSyncSource(), false);
 
             const clampLiveOffsetSeconds = (rawValue) => {
                 const parsed = Number.parseInt(String(rawValue), 10);
@@ -1655,12 +1758,72 @@
 
             const createLiveDvrKey = () => `${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
 
+            const createTransientCacheId = () => {
+                const timePart = Date.now().toString(36);
+                const randomPart = Math.random().toString(36).slice(2, 10);
+                return `${timePart}_${randomPart}`;
+            };
+
+            const releaseTransientTranscode = (transientCacheId, options = {}) => {
+                const useBeacon = Boolean(options.useBeacon);
+                const normalizedId = String(transientCacheId || '').trim();
+                if (!normalizedId || !releaseTranscodeUrl) {
+                    return;
+                }
+
+                const payload = JSON.stringify({ transient_id: normalizedId });
+
+                if (useBeacon && typeof navigator.sendBeacon === 'function') {
+                    const blob = new Blob([payload], { type: 'application/json' });
+                    navigator.sendBeacon(releaseTranscodeUrl, blob);
+                    return;
+                }
+
+                void fetch(releaseTranscodeUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'vstreamware-transcode-release',
+                    },
+                    body: payload,
+                    cache: 'no-store',
+                    keepalive: true,
+                }).catch(() => {
+                    // Cleanup failures are non-fatal and can be retried on the next transition.
+                });
+            };
+
+            const buildRecordedMediaSource = () => {
+                if (!mediaBaseUrl) {
+                    return { url: '', transientCacheId: '' };
+                }
+
+                const transientCacheId = createTransientCacheId();
+                try {
+                    const url = new URL(mediaBaseUrl, window.location.href);
+                    url.searchParams.set('transient_id', transientCacheId);
+                    return {
+                        url: url.toString(),
+                        transientCacheId,
+                    };
+                } catch (_error) {
+                    const separator = mediaBaseUrl.includes('?') ? '&' : '?';
+                    return {
+                        url: `${mediaBaseUrl}${separator}transient_id=${encodeURIComponent(transientCacheId)}`,
+                        transientCacheId,
+                    };
+                }
+            };
+
             const buildLiveMediaUrl = (options = {}) => {
                 if (!mediaBaseUrl) {
                     return '';
                 }
 
                 const dvrKey = typeof options.dvrKey === 'string' ? options.dvrKey : '';
+                const transientCacheId = typeof options.transientCacheId === 'string'
+                    ? options.transientCacheId.trim()
+                    : '';
 
                 try {
                     const url = new URL(mediaBaseUrl, window.location.href);
@@ -1671,28 +1834,69 @@
                         url.searchParams.delete('live_dvr');
                     }
 
+                    if (transientCacheId) {
+                        url.searchParams.set('transient_id', transientCacheId);
+                    } else {
+                        url.searchParams.delete('transient_id');
+                    }
+
                     return url.toString();
                 } catch (_error) {
                     const separator = mediaBaseUrl.includes('?') ? '&' : '?';
                     const offsetParam = `live_offset=${encodeURIComponent(String(liveOffsetSeconds))}`;
                     const dvrParam = dvrKey ? `&live_dvr=${encodeURIComponent(dvrKey)}` : '';
-                    return `${mediaBaseUrl}${separator}${offsetParam}${dvrParam}`;
+                    const transientParam = transientCacheId ? `&transient_id=${encodeURIComponent(transientCacheId)}` : '';
+                    return `${mediaBaseUrl}${separator}${offsetParam}${dvrParam}${transientParam}`;
                 }
             };
+
+            const buildLiveDvrSource = () => {
+                const transientCacheId = createTransientCacheId();
+                return {
+                    url: buildLiveMediaUrl({
+                        dvrKey: createLiveDvrKey(),
+                        transientCacheId,
+                    }),
+                    transientCacheId,
+                };
+            };
+
+            const buildDirectLiveSource = () => ({
+                url: buildLiveMediaUrl(),
+                transientCacheId: '',
+            });
 
             const calculateSmoothBufferSeconds = () => {
                 const derived = Math.round(liveOffsetSeconds * 0.8);
                 return Math.max(8, Math.min(45, derived));
             };
 
-            const loadSource = (url, onReady) => {
-                if (!url) {
+            const loadSource = (source, onReady) => {
+                let sourceUrl = '';
+                let nextTranscodeCacheId = '';
+
+                if (typeof source === 'string') {
+                    sourceUrl = source;
+                } else if (source && typeof source === 'object') {
+                    sourceUrl = String(source.url || '');
+                    nextTranscodeCacheId = String(source.transientCacheId || '').trim();
+                }
+
+                if (!sourceUrl) {
                     return false;
                 }
 
+                const previousTranscodeCacheId = currentTranscodeCacheId;
+                currentTranscodeCacheId = nextTranscodeCacheId;
+
                 const wasPaused = player.paused;
-                player.src = url;
+                player.src = sourceUrl;
                 player.load();
+
+                if (previousTranscodeCacheId && previousTranscodeCacheId !== nextTranscodeCacheId) {
+                    releaseTransientTranscode(previousTranscodeCacheId);
+                }
+
                 const handleReady = () => {
                     if (typeof onReady === 'function') {
                         onReady(wasPaused);
@@ -1788,6 +1992,23 @@
                 }
             };
 
+            const updateDirectLiveTimeChipWidth = () => {
+                if (!playerProgressRow) {
+                    return;
+                }
+
+                if (!isDirectLiveMode() || !playerCurrentTime || !playerInlineTotalTime || playerInlineTotalTime.hidden) {
+                    playerProgressRow.style.removeProperty('--live-time-chip-width');
+                    return;
+                }
+
+                const currentLabel = String(playerCurrentTime.textContent || '').trim();
+                const totalLabel = String(playerInlineTotalTime.textContent || '').trim();
+                const widestLabelLength = Math.max(currentLabel.length, totalLabel.length, 4);
+                const chipWidthCh = widestLabelLength + 1;
+                playerProgressRow.style.setProperty('--live-time-chip-width', `${chipWidthCh}ch`);
+            };
+
             const updatePlayerTimelineUi = () => {
                 const mediaEnd = getMediaEnd();
                 const hasTimeline = Number.isFinite(mediaEnd) && mediaEnd > 0;
@@ -1839,6 +2060,8 @@
                     playerDurationTime.hidden = directLiveModeOn;
                     playerDurationTime.textContent = totalTimeDisplay;
                 }
+
+                updateDirectLiveTimeChipWidth();
             };
 
             const updateCustomPlayerUi = () => {
@@ -1926,8 +2149,9 @@
             };
 
             const updateModeControls = () => {
+                const liveOn = Boolean(isLive && !inDvrMode);
+
                 if (liveModeToggleButton) {
-                    const liveOn = !inDvrMode;
                     liveModeToggleButton.classList.toggle('is-live-edge', liveOn);
                     liveModeToggleButton.textContent = 'LIVE';
                     liveModeToggleButton.setAttribute('aria-label', liveOn ? 'Switch to DVR mode' : 'Return to live mode');
@@ -1938,6 +2162,19 @@
                     }
                 }
 
+                if (videoSettingsWrap) {
+                    videoSettingsWrap.hidden = liveOn;
+                }
+
+                if (playbackSpeedToggle) {
+                    playbackSpeedToggle.hidden = liveOn;
+                    playbackSpeedToggle.disabled = liveOn;
+                    if (liveOn) {
+                        setSpeedMenuOpen(false);
+                    }
+                }
+
+                updateChatSyncSourceUi();
                 updateChatSyncMode(liveOffsetSeconds);
                 syncPlaybackSpeedForMode();
                 updateCustomPlayerUi();
@@ -2074,10 +2311,20 @@
                 trySeek();
             };
 
+            const isWithinLiveBufferFromNewest = () => {
+                const mediaEnd = getMediaEnd();
+                if (!Number.isFinite(mediaEnd)) {
+                    return false;
+                }
+
+                const currentTime = Number.isFinite(player.currentTime) ? Math.max(player.currentTime, 0) : 0;
+                const distanceToNewest = Math.max(mediaEnd - currentTime, 0);
+                return distanceToNewest <= Math.max(liveOffsetSeconds, 0);
+            };
+
             const switchToDirectLive = (jumpClosestToLiveEdge = false) => {
-                const liveUrl = buildLiveMediaUrl();
                 inDvrMode = false;
-                const loaded = loadSource(liveUrl, () => {
+                const loaded = loadSource(buildDirectLiveSource(), () => {
                     startNearLiveEdge(jumpClosestToLiveEdge ? calculateSmoothBufferSeconds() : liveOffsetSeconds);
                     lastProgressAt = Date.now();
                     lastProgressTime = player.currentTime;
@@ -2091,19 +2338,26 @@
             };
 
             const switchToDvrMode = (targetTime, options = {}) => {
-                const dvrUrl = buildLiveMediaUrl({ dvrKey: createLiveDvrKey() });
-                if (!dvrUrl) {
+                const dvrSource = buildLiveDvrSource();
+                if (!dvrSource.url) {
                     return;
                 }
 
                 const forcePlay = Boolean(options.forcePlay);
+                const autoReturnToLiveOnCatchUp = Boolean(options.autoReturnToLiveOnCatchUp);
                 inDvrMode = true;
                 const desiredTime = Number.isFinite(targetTime) ? Math.max(targetTime, 0) : Math.max(player.currentTime, 0);
-                const loaded = loadSource(dvrUrl, (wasPaused) => {
+                const loaded = loadSource(dvrSource, (wasPaused) => {
                     try {
                         player.currentTime = desiredTime;
                     } catch (_error) {
                         // Ignore seek errors caused by transient metadata gaps.
+                    }
+
+                    // DVR reached the latest available window, so return to live mode once catch-up is inside buffer.
+                    if (autoReturnToLiveOnCatchUp && isLive && isWithinLiveBufferFromNewest()) {
+                        switchToDirectLive();
+                        return;
                     }
 
                     if (!wasPaused || forcePlay) {
@@ -2170,6 +2424,9 @@
 
             if (isLive) {
                 switchToDirectLive();
+            } else {
+                const recordedSource = buildRecordedMediaSource();
+                loadSource(recordedSource);
             }
 
             void syncChatTimeline(liveOffsetSeconds, true);
@@ -2242,7 +2499,10 @@
                     const now = Date.now();
                     if (now - lastAutoDvrRefreshAt >= dvrAutoRefreshCooldownMs) {
                         lastAutoDvrRefreshAt = now;
-                        switchToDvrMode(player.currentTime, { forcePlay: true });
+                        switchToDvrMode(player.currentTime, {
+                            forcePlay: true,
+                            autoReturnToLiveOnCatchUp: true,
+                        });
                     }
                 }
 
@@ -2484,6 +2744,12 @@
             window.addEventListener('beforeunload', stopChatPolling);
             window.addEventListener('beforeunload', deactivateHoldBoost);
             window.addEventListener('beforeunload', stopSideChatResize);
+            window.addEventListener('beforeunload', () => {
+                releaseTransientTranscode(currentTranscodeCacheId, { useBeacon: true });
+            });
+            window.addEventListener('pagehide', () => {
+                releaseTransientTranscode(currentTranscodeCacheId, { useBeacon: true });
+            });
         })();
     </script>
 </body>

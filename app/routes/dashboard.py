@@ -54,6 +54,7 @@ FORCED_VIDEO_MIME_TYPES = {
 
 _TIMESTAMP_SUFFIX_PATTERN = re.compile(r"^(?P<title>.+?)_(?P<stamp>\d{8}_\d{6})$")
 _LIVE_DVR_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
+_TRANSIENT_CACHE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,96}$")
 
 try:
     import imageio_ffmpeg  # type: ignore[import-not-found]
@@ -151,12 +152,88 @@ def _clear_cache_directory(cache_dir: Path) -> tuple[int, int]:
     return removed_files, removed_dirs
 
 
+def _cache_directory_stats(cache_dir: Path) -> tuple[int, int]:
+    total_files = 0
+    total_bytes = 0
+
+    if not cache_dir.exists() or not cache_dir.is_dir():
+        return total_files, total_bytes
+
+    for item in cache_dir.rglob("*"):
+        if not item.is_file():
+            continue
+
+        try:
+            total_bytes += int(item.stat().st_size)
+            total_files += 1
+        except OSError:
+            continue
+
+    return total_files, total_bytes
+
+
+def _format_size_label(size_bytes: int) -> str:
+    units = ("B", "KB", "MB", "GB", "TB")
+    value = float(max(size_bytes, 0))
+    unit_index = 0
+
+    while value >= 1024 and unit_index < len(units) - 1:
+        value /= 1024
+        unit_index += 1
+
+    if unit_index == 0:
+        return f"{int(value)} {units[unit_index]}"
+
+    return f"{value:.1f} {units[unit_index]}"
+
+
+def _build_cache_summary() -> dict[str, object]:
+    thumbnail_cache_dir = _thumbnail_cache_dir()
+    video_cache_dir = _video_cache_dir()
+    thumbnail_files, thumbnail_bytes = _cache_directory_stats(thumbnail_cache_dir)
+    video_files, video_bytes = _cache_directory_stats(video_cache_dir)
+
+    total_files = thumbnail_files + video_files
+    total_size_bytes = thumbnail_bytes + video_bytes
+    return {
+        "total_files": total_files,
+        "total_size_bytes": total_size_bytes,
+        "total_size_label": _format_size_label(total_size_bytes),
+    }
+
+
 def _thumbnail_cache_path(root: Path, recording_file: Path) -> Path:
     relative_path = recording_file.relative_to(root).as_posix()
     stat = recording_file.stat()
     cache_key = f"{relative_path}|{stat.st_size}|{stat.st_mtime_ns}"
     digest = hashlib.sha256(cache_key.encode("utf-8")).hexdigest()
     return _thumbnail_cache_dir() / f"{digest}.jpg"
+
+
+def _live_thumbnail_cache_prefix(root: Path, recording_file: Path) -> str:
+    relative_path = recording_file.relative_to(root).as_posix()
+    recording_digest = hashlib.sha256(relative_path.encode("utf-8")).hexdigest()[:20]
+    return f"live-{recording_digest}-"
+
+
+def _live_thumbnail_cache_path(root: Path, recording_file: Path) -> Path:
+    cache_prefix = _live_thumbnail_cache_prefix(root, recording_file)
+    stat = recording_file.stat()
+    return _thumbnail_cache_dir() / f"{cache_prefix}{stat.st_mtime_ns}.jpg"
+
+
+def _prune_live_thumbnail_cache(root: Path, recording_file: Path, keep_path: Path) -> None:
+    cache_prefix = _live_thumbnail_cache_prefix(root, recording_file)
+    cache_dir = _thumbnail_cache_dir()
+
+    for candidate in cache_dir.glob(f"{cache_prefix}*.jpg"):
+        if candidate == keep_path or not candidate.is_file():
+            continue
+
+        try:
+            candidate.unlink()
+        except OSError:
+            continue
 
 
 def _video_cache_path(root: Path, recording_file: Path) -> Path:
@@ -171,10 +248,29 @@ def _is_valid_live_dvr_key(key: str) -> bool:
     return bool(_LIVE_DVR_KEY_PATTERN.fullmatch(key))
 
 
-def _live_dvr_snapshot_path(root: Path, recording_file: Path, dvr_key: str) -> Path:
+def _is_valid_transient_cache_id(cache_id: str) -> bool:
+    return bool(_TRANSIENT_CACHE_ID_PATTERN.fullmatch(cache_id))
+
+
+def _live_dvr_snapshot_path(
+    root: Path,
+    recording_file: Path,
+    dvr_key: str,
+    transient_cache_id: str | None = None,
+) -> Path:
     relative_path = recording_file.relative_to(root).as_posix()
     recording_digest = hashlib.sha256(relative_path.encode("utf-8")).hexdigest()[:20]
-    return _video_cache_dir() / f"live-{recording_digest}-{dvr_key}.mp4"
+    transient_prefix = ""
+    if transient_cache_id and _is_valid_transient_cache_id(transient_cache_id):
+        transient_prefix = f"transient-{transient_cache_id}-"
+
+    return _video_cache_dir() / f"{transient_prefix}live-{recording_digest}-{dvr_key}.mp4"
+
+
+def _transient_transcode_path(root: Path, recording_file: Path, transient_cache_id: str) -> Path:
+    relative_path = recording_file.relative_to(root).as_posix()
+    recording_digest = hashlib.sha256(relative_path.encode("utf-8")).hexdigest()[:20]
+    return _video_cache_dir() / f"transient-{transient_cache_id}-{recording_digest}.mp4"
 
 
 def _live_buffer_bounds() -> tuple[int, int]:
@@ -983,6 +1079,7 @@ def settings() -> str:
     auto_recorder.request_refresh()
     dashboard_state = _build_dashboard_state(services)
     pushover_configured = bool(services["notification_dispatcher"].is_configured())
+    cache_summary = _build_cache_summary()
 
     return render_template(
         "dashboard.html",
@@ -991,6 +1088,7 @@ def settings() -> str:
         display_timezone=dashboard_state["display_timezone"],
         dashboard_signature=dashboard_state["dashboard_signature"],
         pushover_configured=pushover_configured,
+        cache_summary=cache_summary,
     )
 
 
@@ -1047,8 +1145,15 @@ def recording_thumbnail(recording_path: str) -> object:
     if resolved_path is None or not resolved_path.exists() or not resolved_path.is_file():
         abort(404)
 
+    services = get_services(current_app)
+    recording_manager = services["recording_manager"]
+    is_live_recording = _is_live_recording_path(recording_manager, resolved_path)
+
     try:
-        thumbnail_path = _thumbnail_cache_path(root, resolved_path)
+        if is_live_recording:
+            thumbnail_path = _live_thumbnail_cache_path(root, resolved_path)
+        else:
+            thumbnail_path = _thumbnail_cache_path(root, resolved_path)
     except (OSError, ValueError):
         thumbnail_path = _thumbnail_cache_dir() / "fallback.jpg"
 
@@ -1062,6 +1167,12 @@ def recording_thumbnail(recording_path: str) -> object:
                 conditional=True,
                 max_age=300,
             )
+
+    if is_live_recording and thumbnail_path.exists() and thumbnail_path.stat().st_size > 0:
+        try:
+            _prune_live_thumbnail_cache(root, resolved_path, keep_path=thumbnail_path)
+        except (OSError, ValueError):
+            pass
 
     return send_file(
         thumbnail_path,
@@ -1078,6 +1189,10 @@ def recording_media(recording_path: str) -> object:
     if resolved_path is None or not resolved_path.exists() or not resolved_path.is_file():
         abort(404)
 
+    transient_cache_id = request.args.get("transient_id", "").strip()
+    if not _is_valid_transient_cache_id(transient_cache_id):
+        transient_cache_id = ""
+
     suffix = resolved_path.suffix.lower()
     if suffix == ".ts":
         services = get_services(current_app)
@@ -1088,7 +1203,12 @@ def recording_media(recording_path: str) -> object:
             live_dvr_key = request.args.get("live_dvr", "").strip()
             if _is_valid_live_dvr_key(live_dvr_key):
                 try:
-                    dvr_snapshot_path = _live_dvr_snapshot_path(root, resolved_path, live_dvr_key)
+                    dvr_snapshot_path = _live_dvr_snapshot_path(
+                        root,
+                        resolved_path,
+                        live_dvr_key,
+                        transient_cache_id=transient_cache_id or None,
+                    )
                 except (OSError, ValueError):
                     dvr_snapshot_path = None
 
@@ -1117,7 +1237,18 @@ def recording_media(recording_path: str) -> object:
                 start_from_end_seconds=live_buffer_seconds,
             )
 
-        converted_mp4 = _materialize_ts_mp4_file(resolved_path)
+        if transient_cache_id:
+            try:
+                transient_path = _transient_transcode_path(root, resolved_path, transient_cache_id)
+            except (OSError, ValueError):
+                transient_path = None
+            converted_mp4 = _materialize_ts_mp4_file(
+                resolved_path,
+                output_path=transient_path,
+            ) if transient_path is not None else None
+        else:
+            converted_mp4 = _materialize_ts_mp4_file(resolved_path)
+
         if converted_mp4 is not None:
             response = send_file(
                 converted_mp4,
@@ -1348,3 +1479,48 @@ def clear_cache() -> object:
         flash("Cache was already empty.", "success")
 
     return _redirect_back("dashboard.index")
+
+
+@dashboard_bp.post("/cache/transcode/release")
+def release_transcode_cache() -> object:
+    transient_cache_id = ""
+
+    payload = request.get_json(silent=True)
+    if isinstance(payload, dict):
+        transient_cache_id = str(payload.get("transient_id", "")).strip()
+
+    if not transient_cache_id:
+        transient_cache_id = request.form.get("transient_id", "").strip()
+
+    if not _is_valid_transient_cache_id(transient_cache_id):
+        return jsonify({"ok": False, "error": "Invalid transient cache id."}), 400
+
+    cache_dir = _video_cache_dir()
+    removed_files = 0
+    removed_size_bytes = 0
+    pattern = f"transient-{transient_cache_id}-*.mp4"
+
+    for path in cache_dir.glob(pattern):
+        if not path.is_file():
+            continue
+
+        file_size = 0
+        try:
+            file_size = int(path.stat().st_size)
+        except OSError:
+            file_size = 0
+
+        try:
+            path.unlink()
+            removed_files += 1
+            removed_size_bytes += max(file_size, 0)
+        except OSError:
+            continue
+
+    return jsonify(
+        {
+            "ok": True,
+            "removed_files": removed_files,
+            "removed_size_bytes": removed_size_bytes,
+        }
+    )
