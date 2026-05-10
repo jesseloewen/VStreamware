@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -59,52 +59,148 @@
                     {% if recording.can_play %}
                         <div class="video-detail-content">
                             <div class="video-detail-player-column">
-                                <div class="video-detail-player-wrap">
-                                    <video id="detail-video" controls preload="auto" src="{{ recording.media_url }}"{% if recording.is_live %} playsinline{% endif %}></video>
-                                </div>
-                                {% if recording.is_live %}
-                                    <div class="live-controls-row">
-                                        <button type="button" id="live-mode-toggle-button" class="button-link live-catchup-button">Live Mode: On</button>
-                                        <button type="button" id="live-refresh-button" class="button-link live-refresh-button" hidden>Refresh</button>
-                                        <div class="live-buffer-control">
-                                            <label for="live-buffer-slider">Buffer</label>
-                                            <input
-                                                id="live-buffer-slider"
-                                                type="range"
-                                                min="{{ live_buffer_min_seconds }}"
-                                                max="{{ live_buffer_max_seconds }}"
-                                                step="1"
-                                                value="{{ live_buffer_default_seconds }}"
-                                                aria-label="Live playback buffer in seconds"
-                                            >
-                                            <input
-                                                id="live-buffer-input"
-                                                type="number"
-                                                min="{{ live_buffer_min_seconds }}"
-                                                max="{{ live_buffer_max_seconds }}"
-                                                step="1"
-                                                value="{{ live_buffer_default_seconds }}"
-                                                aria-label="Live playback buffer seconds"
-                                            >
+                                <div class="video-detail-player-wrap" id="video-player-shell">
+                                    <div class="video-player-stage" id="video-player-stage">
+                                        <video id="detail-video" preload="auto" src="{{ recording.media_url }}"{% if recording.is_live %} playsinline{% endif %}></video>
+                                        <div class="video-center-toggle-anchor" id="center-toggle-anchor" aria-hidden="true"></div>
+                                        <div class="video-gesture-layer" id="video-gesture-layer" aria-live="polite" aria-atomic="true">
+                                            <span class="video-gesture-hint is-back" id="video-gesture-back" hidden>-10s</span>
+                                            <span class="video-gesture-hint is-forward" id="video-gesture-forward" hidden>+10s</span>
+                                            <span class="video-gesture-hint is-hold" id="video-gesture-hold" hidden>2x</span>
                                         </div>
-                                        <span id="live-mode-hint" class="muted">Direct live playback is active.</span>
                                     </div>
-                                {% endif %}
+
+                                    <div class="video-player-ui" id="video-player-ui" aria-label="Video playback controls">
+                                        <button type="button" id="player-center-toggle" class="video-player-center-toggle" aria-label="Play video">
+                                            <svg class="video-icon-svg" data-icon-name="play" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
+                                            <svg class="video-icon-svg" data-icon-name="pause" viewBox="0 0 24 24" aria-hidden="true" hidden fill="currentColor" stroke="none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                                            <span class="sr-only">Play</span>
+                                        </button>
+                                        <div class="video-player-controls" id="video-player-controls">
+                                            <div class="video-controls-main-row{% if recording.is_live %} has-live-middle{% endif %}">
+                                                <div class="video-controls-left">
+                                                    <button type="button" id="player-play-toggle" class="video-control-button video-icon-button" aria-label="Pause video">
+                                                        <svg class="video-icon-svg" data-icon-name="play" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
+                                                        <svg class="video-icon-svg" data-icon-name="pause" viewBox="0 0 24 24" aria-hidden="true" hidden fill="currentColor" stroke="none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                                                        <span class="sr-only">Pause</span>
+                                                    </button>
+                                                    <div class="video-volume-wrap">
+                                                        <button type="button" id="player-mute-toggle" class="video-control-button video-icon-button" aria-label="Mute audio" aria-haspopup="true" aria-expanded="false" aria-controls="player-volume-panel">
+                                                            <svg class="video-icon-svg" data-icon-name="volume" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                                                            <svg class="video-icon-svg" data-icon-name="mute" viewBox="0 0 24 24" aria-hidden="true" hidden fill="currentColor" stroke="none"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+                                                            <span class="sr-only">Mute</span>
+                                                        </button>
+                                                        <div id="player-volume-panel" class="playback-speed-control playback-speed-popover volume-popover" role="group" aria-label="Volume control" hidden>
+                                                            <input
+                                                                id="player-volume-slider"
+                                                                class="video-volume-slider video-volume-slider-popover"
+                                                                type="range"
+                                                                min="0"
+                                                                max="1"
+                                                                step="0.05"
+                                                                value="1"
+                                                                aria-label="Video volume"
+                                                            >
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="video-progress-row">
+                                                    <div class="video-progress-start">
+                                                        <button type="button" id="player-current-time" class="video-time-label video-time-toggle" aria-label="Playback time">0:00</button>
+                                                        {% if recording.is_live %}
+                                                            <span id="player-inline-total-time" class="video-time-label video-time-inline-total" hidden>0:00</span>
+                                                        {% endif %}
+                                                    </div>
+                                                    <div class="video-progress-center">
+                                                        <input
+                                                            id="player-seek-slider"
+                                                            class="video-seek-slider"
+                                                            type="range"
+                                                            min="0"
+                                                            max="0"
+                                                            step="0.1"
+                                                            value="0"
+                                                            aria-label="Seek video timeline"
+                                                        >
+                                                        {% if recording.is_live %}
+                                                            <div id="player-live-inline-controls" class="player-live-inline-controls" hidden>
+                                                                <div class="live-buffer-control live-buffer-control-inline">
+                                                                    <label for="live-buffer-slider">Buffer</label>
+                                                                    <span class="live-buffer-subtext">Buffer time (s)</span>
+                                                                    <input
+                                                                        id="live-buffer-slider"
+                                                                        type="range"
+                                                                        min="{{ live_buffer_min_seconds }}"
+                                                                        max="{{ live_buffer_max_seconds }}"
+                                                                        step="1"
+                                                                        value="{{ live_buffer_default_seconds }}"
+                                                                        aria-label="Live playback buffer in seconds"
+                                                                    >
+                                                                    <input
+                                                                        id="live-buffer-input"
+                                                                        type="number"
+                                                                        min="{{ live_buffer_min_seconds }}"
+                                                                        max="{{ live_buffer_max_seconds }}"
+                                                                        step="1"
+                                                                        value="{{ live_buffer_default_seconds }}"
+                                                                        aria-label="Live playback buffer seconds"
+                                                                    >
+                                                                </div>
+                                                            </div>
+                                                        {% endif %}
+                                                    </div>
+                                                    <div class="video-progress-end">
+                                                        <span id="player-duration-time" class="video-time-label">0:00</span>
+                                                    </div>
+                                                </div>
+                                                {% if recording.is_live %}
+                                                    <div class="video-controls-middle video-controls-middle-live">
+                                                        <button type="button" id="live-refresh-snapshot-button" class="button-link live-refresh-button live-refresh-snapshot-button" aria-label="Refresh snapshot" hidden>
+                                                            <svg class="video-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 3v6h-6"></path></svg>
+                                                            <span class="sr-only">Refresh snapshot</span>
+                                                        </button>
+                                                        <button type="button" id="live-mode-toggle-button" class="button-link video-live-mode-toggle" aria-label="Switch to DVR mode">LIVE</button>
+                                                    </div>
+                                                {% endif %}
+                                                <div class="video-controls-right">
+                                                    <div class="video-settings-wrap">
+                                                        <button type="button" id="playback-speed-toggle" class="meta-chip playback-speed-value playback-speed-toggle" aria-label="Playback settings" aria-haspopup="true" aria-expanded="false" aria-controls="player-settings-panel">
+                                                            <span id="playback-speed-value">1x</span>
+                                                            <span class="sr-only">Playback settings</span>
+                                                        </button>
+                                                        <div id="player-settings-panel" class="playback-speed-control playback-speed-popover" role="group" aria-label="Playback speed" hidden>
+                                                            <div class="playback-speed-options" role="group" aria-label="Playback speed presets">
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="0.75" aria-label="Set playback speed to 0.75x">0.75x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="1" aria-label="Set playback speed to 1x">1x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="1.25" aria-label="Set playback speed to 1.25x">1.25x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="1.5" aria-label="Set playback speed to 1.5x">1.5x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="2" aria-label="Set playback speed to 2x">2x</button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <button type="button" id="player-chat-restore" class="video-control-button video-icon-button video-chat-restore-button" aria-label="Show chat" hidden>
+                                                        <svg class="video-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-5 4v-4H4A1.5 1.5 0 0 1 2.5 16V7A1.5 1.5 0 0 1 4 5.5Z"></path><path d="M7.5 10.5h9"></path><path d="M7.5 13.5h6"></path></svg>
+                                                        <span class="sr-only">Show chat</span>
+                                                    </button>
+                                                    <button type="button" id="player-fullscreen-toggle" class="video-control-button video-icon-button" aria-label="Enter fullscreen">
+                                                        <svg class="video-icon-svg" data-icon-name="fullscreen-enter" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+                                                        <svg class="video-icon-svg" data-icon-name="fullscreen-exit" viewBox="0 0 24 24" aria-hidden="true" hidden fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>
+                                                        <span class="sr-only">Enter fullscreen</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div
-                                class="video-chat-resize-handle"
-                                id="video-chat-resize-handle"
-                                role="separator"
-                                aria-orientation="vertical"
-                                aria-label="Resize fullscreen chat panel"
-                                tabindex="0"
-                            ></div>
+                            <div class="video-chat-resize-handle" id="video-chat-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize side chat panel"></div>
                             <aside class="video-chat-panel" aria-live="polite">
                                 <header class="video-chat-header">
                                     <h3>Chat Replay</h3>
                                     <div class="video-chat-header-actions">
-                                        <button type="button" class="button-link chat-fullscreen-toggle" data-chat-fullscreen-toggle>Expand</button>
-                                        <button type="button" class="button-link chat-native-fullscreen-toggle" data-chat-native-fullscreen-toggle>Fullscreen</button>
+                                        <button type="button" class="video-chat-mode-button" data-chat-mode="side" aria-label="Chat side panel" aria-pressed="true">Side</button>
+                                        <button type="button" class="video-chat-mode-button" data-chat-mode="overlay" aria-label="Chat overlay" aria-pressed="false">Overlay</button>
+                                        <button type="button" class="video-chat-mode-button" data-chat-mode="hidden" aria-label="Hide chat" aria-pressed="false">Hide</button>
                                     </div>
                                 </header>
                                 <p class="muted sync-status" id="chat-sync-status">Connecting to chat timeline...</p>
@@ -124,32 +220,6 @@
                         <div>
                             <dt>Size</dt>
                             <dd>{{ recording.size_bytes }} bytes</dd>
-                        </div>
-                        <div class="chat-offset-meta">
-                            <dt>Chat Offset</dt>
-                            <dd>
-                                <div class="chat-offset-control">
-                                    <label for="chat-offset-slider">Chat Offset</label>
-                                    <input
-                                        id="chat-offset-slider"
-                                        type="range"
-                                        min="-30"
-                                        max="30"
-                                        step="1"
-                                        value="0"
-                                        aria-label="Chat replay offset in seconds"
-                                    >
-                                    <input
-                                        id="chat-offset-input"
-                                        type="number"
-                                        min="-30"
-                                        max="30"
-                                        step="1"
-                                        value="0"
-                                        aria-label="Chat replay offset seconds"
-                                    >
-                                </div>
-                            </dd>
                         </div>
                         <div class="wide">
                             <dt>File</dt>
@@ -172,22 +242,42 @@
         (() => {
             const player = document.getElementById('detail-video');
             const liveModeToggleButton = document.getElementById('live-mode-toggle-button');
-            const refreshButton = document.getElementById('live-refresh-button');
-            const liveModeHint = document.getElementById('live-mode-hint');
+            const snapshotRefreshButton = document.getElementById('live-refresh-snapshot-button');
             const liveBufferSlider = document.getElementById('live-buffer-slider');
             const liveBufferInput = document.getElementById('live-buffer-input');
+            const playerUi = document.getElementById('video-player-ui');
+            const centerToggleAnchor = document.getElementById('center-toggle-anchor');
+            const playerControls = document.getElementById('video-player-controls');
+            const playerCenterToggle = document.getElementById('player-center-toggle');
+            if (centerToggleAnchor && playerCenterToggle) centerToggleAnchor.appendChild(playerCenterToggle);
+            const playerPlayToggle = document.getElementById('player-play-toggle');
+            const playerSeekSlider = document.getElementById('player-seek-slider');
+            const playerCurrentTime = document.getElementById('player-current-time');
+            const playerDurationTime = document.getElementById('player-duration-time');
+            const playerInlineTotalTime = document.getElementById('player-inline-total-time');
+            const playerLiveInlineControls = document.getElementById('player-live-inline-controls');
+            const playerProgressRow = document.querySelector('.video-progress-row');
+            const playerMuteToggle = document.getElementById('player-mute-toggle');
+            const playerVolumePanel = document.getElementById('player-volume-panel');
+            const playerVolumeSlider = document.getElementById('player-volume-slider');
+            const playbackSpeedToggle = document.getElementById('playback-speed-toggle');
+            const playerSettingsPanel = document.getElementById('player-settings-panel');
+            const playerFullscreenToggle = document.getElementById('player-fullscreen-toggle');
+            const playerChatRestoreButton = document.getElementById('player-chat-restore');
+            const playbackSpeedValue = document.getElementById('playback-speed-value');
+            const playbackSpeedButtons = Array.from(document.querySelectorAll('[data-playback-speed]'));
+            const gestureBackIndicator = document.getElementById('video-gesture-back');
+            const gestureForwardIndicator = document.getElementById('video-gesture-forward');
+            const gestureHoldIndicator = document.getElementById('video-gesture-hold');
             const chatList = document.getElementById('video-chat-list');
             const chatJumpLatestButton = document.getElementById('chat-jump-latest');
             const chatSyncStatus = document.getElementById('chat-sync-status');
             const chatSyncMode = document.getElementById('chat-sync-mode');
-            const chatOffsetSlider = document.getElementById('chat-offset-slider');
-            const chatOffsetInput = document.getElementById('chat-offset-input');
             const videoDetailContent = document.querySelector('.video-detail-content');
             const videoPlayerWrap = document.querySelector('.video-detail-player-wrap');
             const chatPanel = document.querySelector('.video-chat-panel');
             const chatResizeHandle = document.getElementById('video-chat-resize-handle');
-            const fullscreenChatToggleButtons = Array.from(document.querySelectorAll('[data-chat-fullscreen-toggle]'));
-            const nativeFullscreenToggleButtons = Array.from(document.querySelectorAll('[data-chat-native-fullscreen-toggle]'));
+            const chatModeButtons = Array.from(document.querySelectorAll('[data-chat-mode]'));
             const displayTimezonePreference = {{ display_timezone | tojson }};
             const isLive = {{ 'true' if recording.is_live else 'false' }};
             const chatUrl = {{ recording.chat_url | tojson }};
@@ -196,77 +286,234 @@
             const liveOffsetSecondsMin = {{ live_buffer_min_seconds }};
             const liveOffsetSecondsMax = {{ live_buffer_max_seconds }};
             const liveBufferStorageKey = 'vstreamware.live-buffer-seconds';
-            const chatOffsetStorageKey = 'vstreamware.chat-offset-seconds';
-            const fullscreenChatWidthStorageKey = 'vstreamware.fullscreen-chat-width';
-            const chatOffsetSecondsDefault = 0;
-            const chatOffsetSecondsMin = -30;
-            const chatOffsetSecondsMax = 30;
+            const playbackSpeedStorageKey = 'vstreamware.playback-speed';
+            const fullscreenChatModeStorageKey = 'vstreamware.fullscreen-chat-mode';
+            const fullscreenSideChatWidthStorageKey = 'vstreamware.fullscreen-side-chat-width';
+            const playbackSpeedOptions = [0.75, 1, 1.25, 1.5, 2];
+            const fullscreenSideChatDefaultRatio = 0.34;
+            const fullscreenSideChatMinWidthDesktopPx = 280;
+            const fullscreenSideChatMinWidthMobilePx = 210;
+            const holdBoostPlaybackSpeed = 2;
+            const gestureSeekSeconds = 10;
+            const doubleTapMaxDelayMs = 280;
+            const holdBoostDelayMs = 320;
+            const holdBoostMoveTolerancePx = 22;
+            const playerSeekStepSeconds = 0.1;
             let inDvrMode = false;
-            let isChatResizing = false;
-            let activeResizePointerId = null;
-            let chatOffsetSeconds = chatOffsetSecondsDefault;
             let highlightedInputTimer = null;
             let isChatAutoFollowEnabled = true;
             const chatAutoFollowBottomThresholdPx = 24;
             let renderedChatMessageKeys = [];
             let renderedChatMessageKeySet = new Set();
+            let preferredPlaybackSpeed = 1;
+            let effectivePlaybackSpeed = 1;
+            let holdBoostActive = false;
+            let holdBoostRestoreSpeed = 1;
+            let holdPointerId = null;
+            let holdPointerStartX = 0;
+            let holdPointerStartY = 0;
+            let holdBoostTimer = null;
+            let seekGestureTimer = null;
+            let lastTouchTapAt = 0;
+            let lastTouchTapSide = '';
+            let lastTouchTapX = 0;
+            let lastTouchTapY = 0;
+            let isSeekingWithSlider = false;
+            let hideControlsTimer = null;
+            let isSpeedMenuOpen = false;
+            let isVolumeMenuOpen = false;
+            let lastVisibleFullscreenChatMode = 'side';
+            let activeChatResizePointerId = null;
+            let isChatSideResizing = false;
+            let timeMetricShowsRemaining = false;
 
-            const isNativeFullscreenLayout = () => document.fullscreenElement === videoDetailContent;
-            const isBrowserExpandedLayout = () => Boolean(videoDetailContent && videoDetailContent.classList.contains('is-chat-layout-expanded'));
+            const isPlayerFullscreen = () => document.fullscreenElement === videoDetailContent;
 
-            const readFullscreenChatWidth = () => {
+            const isMobileViewport = () => window.matchMedia('(max-width: 980px), (pointer: coarse)').matches;
+
+            const getFullscreenSideChatMinWidthPx = () => (
+                isMobileViewport() ? fullscreenSideChatMinWidthMobilePx : fullscreenSideChatMinWidthDesktopPx
+            );
+
+            const lockLandscapeOnMobile = async () => {
+                if (!isMobileViewport()) {
+                    return;
+                }
+
+                const orientation = screen.orientation;
+                if (!orientation || typeof orientation.lock !== 'function') {
+                    return;
+                }
+
                 try {
-                    const stored = window.localStorage.getItem(fullscreenChatWidthStorageKey);
-                    if (!stored) {
-                        return null;
-                    }
-
-                    const parsed = Number.parseInt(stored, 10);
-                    if (!Number.isFinite(parsed) || parsed <= 0) {
-                        return null;
-                    }
-
-                    return parsed;
+                    await orientation.lock('landscape');
                 } catch (_error) {
-                    return null;
+                    // Orientation lock support varies by browser/device.
                 }
             };
 
-            const clampFullscreenChatWidth = (candidateWidth) => {
+            const unlockOrientationIfSupported = () => {
+                const orientation = screen.orientation;
+                if (!orientation || typeof orientation.unlock !== 'function') {
+                    return;
+                }
+
+                try {
+                    orientation.unlock();
+                } catch (_error) {
+                    // Ignore unlock failures.
+                }
+            };
+
+            const normalizeFullscreenChatMode = (rawValue) => {
+                const mode = String(rawValue || '').trim().toLowerCase();
+                if (mode === 'overlay' || mode === 'hidden') {
+                    return mode;
+                }
+
+                return 'side';
+            };
+
+            const readPersistedFullscreenChatMode = () => {
+                try {
+                    const stored = window.localStorage.getItem(fullscreenChatModeStorageKey);
+                    if (!stored) {
+                        return 'side';
+                    }
+
+                    return normalizeFullscreenChatMode(stored);
+                } catch (_error) {
+                    return 'side';
+                }
+            };
+
+            const clampFullscreenSideChatWidth = (rawWidth) => {
                 const viewportWidth = Math.max(window.innerWidth || 0, 800);
-                const minWidth = 280;
-                const maxWidth = Math.max(minWidth, Math.floor(viewportWidth * 0.52));
-                const nextWidth = Number.parseInt(String(candidateWidth), 10);
-                if (!Number.isFinite(nextWidth)) {
-                    return Math.min(Math.max(Math.floor(viewportWidth * 0.34), minWidth), maxWidth);
-                }
-
-                return Math.min(Math.max(nextWidth, minWidth), maxWidth);
+                const minWidth = getFullscreenSideChatMinWidthPx();
+                const maxWidth = Math.max(minWidth + 40, Math.floor(viewportWidth * 0.62));
+                const fallback = Math.round(viewportWidth * fullscreenSideChatDefaultRatio);
+                const parsed = Number.parseInt(String(rawWidth), 10);
+                const candidate = Number.isFinite(parsed) ? parsed : fallback;
+                return Math.max(minWidth, Math.min(maxWidth, candidate));
             };
 
-            const setFullscreenChatWidth = (candidateWidth, persist = true) => {
+            const setFullscreenSideChatWidth = (rawWidth, persist = true) => {
                 if (!videoDetailContent) {
-                    return null;
+                    return;
                 }
 
-                const nextWidth = clampFullscreenChatWidth(candidateWidth);
-                videoDetailContent.style.setProperty('--fullscreen-chat-width', `${nextWidth}px`);
+                const widthPx = clampFullscreenSideChatWidth(rawWidth);
+                videoDetailContent.style.setProperty('--fullscreen-side-chat-width', `${widthPx}px`);
 
                 if (chatResizeHandle) {
-                    const viewportWidth = Math.max(window.innerWidth || 0, 1);
-                    const ratio = Math.round((nextWidth / viewportWidth) * 100);
-                    chatResizeHandle.setAttribute('aria-valuenow', String(ratio));
+                    chatResizeHandle.setAttribute('aria-valuenow', String(widthPx));
                 }
 
                 if (persist) {
                     try {
-                        window.localStorage.setItem(fullscreenChatWidthStorageKey, String(nextWidth));
+                        window.localStorage.setItem(fullscreenSideChatWidthStorageKey, String(widthPx));
                     } catch (_error) {
                         // Ignore storage failures.
                     }
                 }
+            };
 
-                return nextWidth;
+            const readPersistedFullscreenSideChatWidth = () => {
+                try {
+                    const stored = window.localStorage.getItem(fullscreenSideChatWidthStorageKey);
+                    if (!stored) {
+                        return clampFullscreenSideChatWidth(null);
+                    }
+
+                    return clampFullscreenSideChatWidth(stored);
+                } catch (_error) {
+                    return clampFullscreenSideChatWidth(null);
+                }
+            };
+
+            const isFullscreenSideChatMode = () => Boolean(
+                isPlayerFullscreen()
+                && videoDetailContent
+                && videoDetailContent.classList.contains('chat-mode-side')
+            );
+
+            const updateChatResizeHandleVisibility = () => {
+                if (!chatResizeHandle) {
+                    return;
+                }
+
+                const isActive = isFullscreenSideChatMode();
+                chatResizeHandle.tabIndex = isActive ? 0 : -1;
+                chatResizeHandle.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+            };
+
+            const stopSideChatResize = () => {
+                if (!isChatSideResizing) {
+                    return;
+                }
+
+                isChatSideResizing = false;
+                activeChatResizePointerId = null;
+                document.body.classList.remove('is-chat-side-resizing');
+
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                const current = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-side-chat-width').trim();
+                setFullscreenSideChatWidth(current || readPersistedFullscreenSideChatWidth(), true);
+            };
+
+            const resizeSideChatFromClientX = (clientX) => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                const bounds = videoDetailContent.getBoundingClientRect();
+                if (bounds.width <= 0) {
+                    return;
+                }
+
+                const width = Math.round(bounds.right - clientX);
+                setFullscreenSideChatWidth(width, false);
+            };
+
+            const setFullscreenChatMode = (rawMode, persist = true) => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                const mode = normalizeFullscreenChatMode(rawMode);
+                videoDetailContent.classList.remove('chat-mode-side', 'chat-mode-overlay', 'chat-mode-hidden');
+                videoDetailContent.classList.add(`chat-mode-${mode}`);
+                if (mode !== 'hidden') {
+                    lastVisibleFullscreenChatMode = mode;
+                }
+
+                if (mode !== 'side') {
+                    stopSideChatResize();
+                }
+
+                if (mode === 'side' && isPlayerFullscreen()) {
+                    setFullscreenSideChatWidth(readPersistedFullscreenSideChatWidth(), false);
+                }
+
+                for (const button of chatModeButtons) {
+                    const buttonMode = normalizeFullscreenChatMode(button.getAttribute('data-chat-mode'));
+                    button.setAttribute('aria-pressed', buttonMode === mode ? 'true' : 'false');
+                }
+
+                updatePlayerChatRestoreButton();
+                updateChatResizeHandleVisibility();
+                updateFullscreenOverlayChatMetrics();
+
+                if (persist) {
+                    try {
+                        window.localStorage.setItem(fullscreenChatModeStorageKey, mode);
+                    } catch (_error) {
+                        // Ignore storage failures.
+                    }
+                }
             };
 
             const setNormalModeChatHeight = () => {
@@ -274,7 +521,7 @@
                     return;
                 }
 
-                if (isNativeFullscreenLayout() || isBrowserExpandedLayout()) {
+                if (isPlayerFullscreen()) {
                     return;
                 }
 
@@ -286,114 +533,29 @@
                 videoDetailContent.style.setProperty('--video-chat-height', `${Math.round(wrapRect.height)}px`);
             };
 
-            const applyLayoutState = () => {
-                if (!videoDetailContent) {
+            const updateFullscreenOverlayChatMetrics = () => {
+                if (!videoDetailContent || !videoPlayerWrap || !playerControls) {
                     return;
                 }
 
-                const isNativeFullscreen = isNativeFullscreenLayout();
-                const isBrowserExpanded = isBrowserExpandedLayout();
-                const isExpanded = isNativeFullscreen || isBrowserExpanded;
-
-                document.body.classList.toggle('is-chat-layout-expanded', isExpanded);
-
-                for (const button of fullscreenChatToggleButtons) {
-                    button.textContent = isBrowserExpanded ? 'Exit Expanded' : 'Expand';
-                }
-
-                for (const button of nativeFullscreenToggleButtons) {
-                    button.textContent = isNativeFullscreen ? 'Exit Fullscreen' : 'Fullscreen';
-                    button.disabled = !isBrowserExpanded && !isNativeFullscreen;
-                }
-
-                if (isExpanded) {
-                    const restoredWidth = readFullscreenChatWidth();
-                    setFullscreenChatWidth(restoredWidth ?? Math.floor(window.innerWidth * 0.34), false);
-                    void syncChatTimeline(liveOffsetSeconds, true);
+                if (!isPlayerFullscreen()) {
+                    videoDetailContent.classList.remove('fullscreen-controls-hidden');
+                    videoDetailContent.style.removeProperty('--fullscreen-controls-safe-bottom-dynamic');
                     return;
                 }
 
-                document.body.classList.remove('is-chat-resizing');
-                isChatResizing = false;
-                activeResizePointerId = null;
-                setNormalModeChatHeight();
-            };
+                const controlsRect = playerControls.getBoundingClientRect();
+                const measuredControlsHeight = Number.isFinite(controlsRect.height) ? Math.round(controlsRect.height) : 0;
+                const controlsHidden = videoPlayerWrap.classList.contains('is-idle') && !isSpeedMenuOpen && !isVolumeMenuOpen;
+                const safeBottomPx = controlsHidden
+                    ? 16
+                    : Math.min(Math.max(measuredControlsHeight + 24, 96), 260);
 
-            const setBrowserExpandedLayout = (enabled) => {
-                if (!videoDetailContent) {
-                    return;
-                }
-
-                videoDetailContent.classList.toggle('is-chat-layout-expanded', Boolean(enabled));
-                applyLayoutState();
-            };
-
-            const toggleBrowserExpandedLayout = async () => {
-                if (!videoDetailContent) {
-                    return;
-                }
-
-                const shouldExpand = !isBrowserExpandedLayout();
-
-                if (!shouldExpand && isNativeFullscreenLayout()) {
-                    try {
-                        await document.exitFullscreen();
-                    } catch (_error) {
-                        // Ignore fullscreen exit failures.
-                    }
-                }
-
-                setBrowserExpandedLayout(shouldExpand);
-            };
-
-            const toggleNativeFullscreenLayout = async () => {
-                if (!videoDetailContent || !document.fullscreenEnabled) {
-                    return;
-                }
-
-                try {
-                    if (isNativeFullscreenLayout()) {
-                        await document.exitFullscreen();
-                    } else {
-                        if (!isBrowserExpandedLayout()) {
-                            setBrowserExpandedLayout(true);
-                        }
-
-                        await videoDetailContent.requestFullscreen();
-                    }
-                } catch (_error) {
-                    // Ignore fullscreen API errors and continue playback.
-                }
-
-                applyLayoutState();
-            };
-
-            const handleResizePointerMove = (event) => {
-                if (!isChatResizing || !videoDetailContent || (!isNativeFullscreenLayout() && !isBrowserExpandedLayout())) {
-                    return;
-                }
-
-                const bounds = videoDetailContent.getBoundingClientRect();
-                const nextWidth = Math.round(bounds.right - event.clientX);
-                setFullscreenChatWidth(nextWidth, false);
-            };
-
-            const stopResizePointerSession = () => {
-                if (!isChatResizing) {
-                    return;
-                }
-
-                document.body.classList.remove('is-chat-resizing');
-                isChatResizing = false;
-                activeResizePointerId = null;
-
-                if (videoDetailContent) {
-                    const computed = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-chat-width').trim();
-                    const numeric = Number.parseInt(computed, 10);
-                    if (Number.isFinite(numeric)) {
-                        setFullscreenChatWidth(numeric, true);
-                    }
-                }
+                videoDetailContent.style.setProperty('--fullscreen-controls-safe-bottom-dynamic', `${safeBottomPx}px`);
+                videoDetailContent.classList.toggle(
+                    'fullscreen-controls-hidden',
+                    controlsHidden && videoDetailContent.classList.contains('chat-mode-overlay'),
+                );
             };
 
             const resolveDisplayTimezone = () => {
@@ -661,6 +823,231 @@
                 }
             };
 
+            const isPlaybackSpeedLocked = () => Boolean(isLive && !inDvrMode);
+
+            const normalizePlaybackSpeed = (rawValue) => {
+                const parsed = Number.parseFloat(String(rawValue));
+                if (!Number.isFinite(parsed)) {
+                    return 1;
+                }
+
+                let closest = playbackSpeedOptions[0];
+                for (const option of playbackSpeedOptions) {
+                    if (Math.abs(option - parsed) < Math.abs(closest - parsed)) {
+                        closest = option;
+                    }
+                }
+
+                return closest;
+            };
+
+            const formatPlaybackSpeed = (rawValue) => {
+                const normalized = normalizePlaybackSpeed(rawValue);
+                if (Number.isInteger(normalized)) {
+                    return `${normalized.toFixed(0)}x`;
+                }
+
+                return `${normalized.toFixed(2).replace(/0$/, '')}x`;
+            };
+
+            const readPersistedPlaybackSpeed = () => {
+                try {
+                    const raw = window.localStorage.getItem(playbackSpeedStorageKey);
+                    if (!raw) {
+                        return 1;
+                    }
+
+                    return normalizePlaybackSpeed(raw);
+                } catch (_error) {
+                    return 1;
+                }
+            };
+
+            const persistPreferredPlaybackSpeed = (rawValue) => {
+                try {
+                    window.localStorage.setItem(playbackSpeedStorageKey, String(normalizePlaybackSpeed(rawValue)));
+                } catch (_error) {
+                    // Ignore storage failures.
+                }
+            };
+
+            const setSeekIndicatorVisible = (indicator, visible) => {
+                if (!indicator) {
+                    return;
+                }
+
+                if (!visible) {
+                    indicator.classList.remove('is-visible');
+                    indicator.hidden = true;
+                    return;
+                }
+
+                indicator.hidden = false;
+                indicator.classList.add('is-visible');
+            };
+
+            const showSeekGesture = (direction) => {
+                const activeIndicator = direction === 'back' ? gestureBackIndicator : gestureForwardIndicator;
+                const inactiveIndicator = direction === 'back' ? gestureForwardIndicator : gestureBackIndicator;
+                setSeekIndicatorVisible(inactiveIndicator, false);
+                setSeekIndicatorVisible(activeIndicator, true);
+
+                if (seekGestureTimer !== null) {
+                    window.clearTimeout(seekGestureTimer);
+                }
+
+                seekGestureTimer = window.setTimeout(() => {
+                    setSeekIndicatorVisible(gestureBackIndicator, false);
+                    setSeekIndicatorVisible(gestureForwardIndicator, false);
+                    seekGestureTimer = null;
+                }, 720);
+            };
+
+            const setHoldGestureVisible = (visible) => {
+                if (!gestureHoldIndicator) {
+                    return;
+                }
+
+                if (!visible) {
+                    gestureHoldIndicator.classList.remove('is-visible');
+                    gestureHoldIndicator.hidden = true;
+                    return;
+                }
+
+                gestureHoldIndicator.hidden = false;
+                gestureHoldIndicator.classList.add('is-visible');
+            };
+
+            const updatePlaybackSpeedUi = () => {
+                const locked = isPlaybackSpeedLocked();
+
+                if (playbackSpeedValue) {
+                    playbackSpeedValue.textContent = formatPlaybackSpeed(effectivePlaybackSpeed);
+                }
+
+                for (const button of playbackSpeedButtons) {
+                    const optionValue = normalizePlaybackSpeed(button.getAttribute('data-playback-speed') || '1');
+                    const isActive = Math.abs(optionValue - effectivePlaybackSpeed) < 0.001;
+                    button.classList.toggle('is-active', isActive);
+                    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                    button.disabled = locked && optionValue !== 1;
+                }
+            };
+
+            const applyPlaybackSpeed = (rawValue, options = {}) => {
+                const persist = Boolean(options.persist);
+                const target = normalizePlaybackSpeed(rawValue);
+                const locked = isPlaybackSpeedLocked();
+                const nextSpeed = locked ? 1 : target;
+
+                try {
+                    player.playbackRate = nextSpeed;
+                    player.defaultPlaybackRate = nextSpeed;
+                } catch (_error) {
+                    // Ignore transient browser playbackRate errors.
+                }
+
+                effectivePlaybackSpeed = nextSpeed;
+
+                if (persist && !locked && !holdBoostActive) {
+                    preferredPlaybackSpeed = target;
+                    persistPreferredPlaybackSpeed(target);
+                }
+
+                updatePlaybackSpeedUi();
+                return effectivePlaybackSpeed;
+            };
+
+            const syncPlaybackSpeedForMode = () => {
+                const locked = isPlaybackSpeedLocked();
+                if (locked) {
+                    holdBoostActive = false;
+                    setHoldGestureVisible(false);
+                    applyPlaybackSpeed(1);
+                    return;
+                }
+
+                if (holdBoostActive) {
+                    applyPlaybackSpeed(holdBoostPlaybackSpeed);
+                    return;
+                }
+
+                applyPlaybackSpeed(preferredPlaybackSpeed);
+            };
+
+            const clearHoldBoostTimer = () => {
+                if (holdBoostTimer === null) {
+                    return;
+                }
+
+                window.clearTimeout(holdBoostTimer);
+                holdBoostTimer = null;
+            };
+
+            const showFullscreenControls = () => {
+                if (hideControlsTimer) window.clearTimeout(hideControlsTimer);
+                if (videoPlayerWrap) videoPlayerWrap.classList.remove('is-idle');
+                updateFullscreenOverlayChatMetrics();
+                if (isPlayerFullscreen()) {
+                    hideControlsTimer = window.setTimeout(() => {
+                        if (!videoPlayerWrap.classList.contains('is-playing') || isSpeedMenuOpen || isVolumeMenuOpen) return;
+                        videoPlayerWrap.classList.add('is-idle');
+                        updateFullscreenOverlayChatMetrics();
+                    }, 2500);
+                }
+            };
+
+            const resetTouchTapState = () => {
+                lastTouchTapAt = 0;
+                lastTouchTapSide = '';
+                lastTouchTapX = 0;
+                lastTouchTapY = 0;
+            };
+
+            const setControlButtonIcon = (button, iconName, label) => {
+                if (!button) {
+                    return;
+                }
+
+                const iconElements = Array.from(button.querySelectorAll('[data-icon-name]'));
+                for (const iconElement of iconElements) {
+                    if (iconElement.getAttribute('data-icon-name') !== iconName) { iconElement.setAttribute('hidden', ''); } else { iconElement.removeAttribute('hidden'); }
+                }
+
+                const srOnly = button.querySelector('.sr-only');
+                if (srOnly) {
+                    srOnly.textContent = label;
+                }
+            };
+
+            const setSpeedMenuOpen = (isOpen) => {
+                if (!playbackSpeedToggle || !playerSettingsPanel) {
+                    return;
+                }
+
+                isSpeedMenuOpen = Boolean(isOpen);
+                playerSettingsPanel.hidden = !isSpeedMenuOpen;
+                playbackSpeedToggle.setAttribute('aria-expanded', isSpeedMenuOpen ? 'true' : 'false');
+                if (videoPlayerWrap) {
+                    videoPlayerWrap.classList.toggle('is-speed-menu-open', isSpeedMenuOpen);
+                }
+                updateFullscreenOverlayChatMetrics();
+            };
+
+            const setVolumeMenuOpen = (isOpen) => {
+                if (!playerMuteToggle || !playerVolumePanel) {
+                    return;
+                }
+
+                isVolumeMenuOpen = Boolean(isOpen);
+                playerVolumePanel.hidden = !isVolumeMenuOpen;
+                playerMuteToggle.setAttribute('aria-expanded', isVolumeMenuOpen ? 'true' : 'false');
+                if (videoPlayerWrap) {
+                    videoPlayerWrap.classList.toggle('is-volume-menu-open', isVolumeMenuOpen);
+                }
+                updateFullscreenOverlayChatMetrics();
+            };
+
             const isChatNearBottom = () => {
                 if (!chatList) {
                     return true;
@@ -740,7 +1127,7 @@
                 ].filter(Boolean).join(' ');
 
                 const replyHtml = isReply
-                    ? `<p class="video-chat-reply"><span>↪ ${escapeHtml(replyAuthor)}</span> ${escapeHtml(replyBody)}</p>`
+                    ? `<p class="video-chat-reply"><span>â†ª ${escapeHtml(replyAuthor)}</span> ${escapeHtml(replyBody)}</p>`
                     : '';
 
                 return `
@@ -822,64 +1209,6 @@
                 setChatAutoFollow(false);
             };
 
-            const formatSignedSeconds = (rawValue) => {
-                const numeric = Number(rawValue);
-                if (!Number.isFinite(numeric)) {
-                    return '0s';
-                }
-
-                const rounded = Math.round(numeric);
-                if (rounded > 0) {
-                    return `+${rounded}s`;
-                }
-
-                return `${rounded}s`;
-            };
-
-            const clampChatOffsetSeconds = (rawValue) => {
-                const parsed = Number.parseInt(String(rawValue), 10);
-                if (!Number.isFinite(parsed)) {
-                    return chatOffsetSecondsDefault;
-                }
-
-                return Math.max(chatOffsetSecondsMin, Math.min(chatOffsetSecondsMax, parsed));
-            };
-
-            const setChatOffsetSeconds = (rawValue, persist = true) => {
-                chatOffsetSeconds = clampChatOffsetSeconds(rawValue);
-
-                if (chatOffsetSlider && chatOffsetSlider.value !== String(chatOffsetSeconds)) {
-                    chatOffsetSlider.value = String(chatOffsetSeconds);
-                }
-
-                if (chatOffsetInput && chatOffsetInput.value !== String(chatOffsetSeconds)) {
-                    chatOffsetInput.value = String(chatOffsetSeconds);
-                }
-
-                if (persist) {
-                    try {
-                        window.localStorage.setItem(chatOffsetStorageKey, String(chatOffsetSeconds));
-                    } catch (_error) {
-                        // Ignore storage failures.
-                    }
-                }
-
-                return chatOffsetSeconds;
-            };
-
-            const readPersistedChatOffsetSeconds = () => {
-                try {
-                    const rawValue = window.localStorage.getItem(chatOffsetStorageKey);
-                    if (!rawValue) {
-                        return chatOffsetSecondsDefault;
-                    }
-
-                    return clampChatOffsetSeconds(rawValue);
-                } catch (_error) {
-                    return chatOffsetSecondsDefault;
-                }
-            };
-
             const updateChatSyncMode = (liveOffsetSeconds) => {
                 if (!chatSyncMode) {
                     return;
@@ -908,7 +1237,7 @@
 
                 if (isLive && !inDvrMode) {
                     const baseTargetMs = Date.now() - (Math.max(liveOffsetSeconds, 0) * 1000);
-                    return baseTargetMs + (chatOffsetSeconds * 1000);
+                    return baseTargetMs;
                 }
 
                 if (!Number.isFinite(recordingStartUtcMs)) {
@@ -916,7 +1245,7 @@
                 }
 
                 const playbackPositionMs = Math.round(Math.max(player.currentTime, 0) * 1000);
-                return Number(recordingStartUtcMs) + playbackPositionMs + (chatOffsetSeconds * 1000);
+                return Number(recordingStartUtcMs) + playbackPositionMs;
             };
 
             let chatSyncInFlight = false;
@@ -1020,6 +1349,191 @@
             player.muted = false;
             player.defaultMuted = false;
             player.autoplay = isLive;
+            player.controls = false;
+
+            if (playerVolumeSlider) {
+                playerVolumeSlider.value = String(Math.max(0, Math.min(1, player.volume || 1)));
+            }
+
+            if (playerCenterToggle) {
+                playerCenterToggle.addEventListener('click', () => {
+                    togglePlayerPlayback();
+                });
+            }
+
+            if (playerPlayToggle) {
+                playerPlayToggle.addEventListener('click', () => {
+                    togglePlayerPlayback();
+                });
+            }
+
+            if (playerSeekSlider) {
+                playerSeekSlider.addEventListener('input', () => {
+                    isSeekingWithSlider = true;
+                    if (playerCurrentTime) {
+                        const previewCurrent = Math.max(Number(playerSeekSlider.value), 0);
+                        const previewMediaEnd = getMediaEnd();
+                        const hasPreviewTimeline = Number.isFinite(previewMediaEnd) && previewMediaEnd > 0;
+                        const previewRemaining = hasPreviewTimeline ? Math.max(previewMediaEnd - previewCurrent, 0) : 0;
+                        if (timeMetricShowsRemaining && hasPreviewTimeline) {
+                            playerCurrentTime.textContent = `-${formatPlaybackClock(previewRemaining)}`;
+                        } else {
+                            playerCurrentTime.textContent = formatPlaybackClock(previewCurrent);
+                        }
+                    }
+                });
+
+                playerSeekSlider.addEventListener('change', () => {
+                    seekToTimelinePosition(playerSeekSlider.value);
+                    isSeekingWithSlider = false;
+                });
+
+                playerSeekSlider.addEventListener('blur', () => {
+                    isSeekingWithSlider = false;
+                    updatePlayerTimelineUi();
+                });
+            }
+
+            if (playerCurrentTime) {
+                playerCurrentTime.addEventListener('click', () => {
+                    const hasTimeline = Number.isFinite(getMediaEnd()) && getMediaEnd() > 0;
+                    if (!hasTimeline) {
+                        return;
+                    }
+
+                    timeMetricShowsRemaining = !timeMetricShowsRemaining;
+                    updatePlayerTimelineUi();
+                });
+            }
+
+            if (playerMuteToggle) {
+                playerMuteToggle.addEventListener('click', () => {
+                    if (isVolumeMenuOpen) {
+                        togglePlayerMute();
+                        return;
+                    }
+
+                    setSpeedMenuOpen(false);
+                    setVolumeMenuOpen(true);
+                });
+            }
+
+            if (playerVolumeSlider) {
+                playerVolumeSlider.addEventListener('input', () => {
+                    setPlayerVolume(playerVolumeSlider.value);
+                });
+            }
+
+            if (playerFullscreenToggle) {
+                playerFullscreenToggle.addEventListener('click', () => {
+                    void togglePlayerFullscreen();
+                });
+            }
+
+            if (chatResizeHandle) {
+                chatResizeHandle.addEventListener('pointerdown', (event) => {
+                    if (!isFullscreenSideChatMode()) {
+                        return;
+                    }
+
+                    isChatSideResizing = true;
+                    activeChatResizePointerId = event.pointerId;
+                    document.body.classList.add('is-chat-side-resizing');
+                    chatResizeHandle.setPointerCapture(event.pointerId);
+                    resizeSideChatFromClientX(event.clientX);
+                    event.preventDefault();
+                });
+
+                chatResizeHandle.addEventListener('pointermove', (event) => {
+                    if (!isChatSideResizing || activeChatResizePointerId !== event.pointerId) {
+                        return;
+                    }
+
+                    resizeSideChatFromClientX(event.clientX);
+                });
+
+                chatResizeHandle.addEventListener('pointerup', (event) => {
+                    if (activeChatResizePointerId !== event.pointerId) {
+                        return;
+                    }
+
+                    stopSideChatResize();
+                });
+
+                chatResizeHandle.addEventListener('pointercancel', () => {
+                    stopSideChatResize();
+                });
+
+                chatResizeHandle.addEventListener('keydown', (event) => {
+                    if (!isFullscreenSideChatMode()) {
+                        return;
+                    }
+
+                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+                        return;
+                    }
+
+                    const current = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-side-chat-width').trim();
+                    const currentPx = clampFullscreenSideChatWidth(current);
+                    const delta = event.key === 'ArrowLeft' ? 24 : -24;
+                    setFullscreenSideChatWidth(currentPx + delta, true);
+                    event.preventDefault();
+                });
+            }
+
+            if (playerChatRestoreButton) {
+                playerChatRestoreButton.addEventListener('click', () => {
+                    const restoreMode = lastVisibleFullscreenChatMode === 'overlay' ? 'overlay' : 'side';
+                    setFullscreenChatMode(restoreMode);
+                    showFullscreenControls();
+                });
+            }
+
+            if (playbackSpeedToggle) {
+                playbackSpeedToggle.addEventListener('click', () => {
+                    setVolumeMenuOpen(false);
+                    setSpeedMenuOpen(!isSpeedMenuOpen);
+                });
+            }
+
+            document.addEventListener('pointerdown', (event) => {
+                const target = event.target;
+                if (!(target instanceof Node)) {
+                    return;
+                }
+
+                if (isSpeedMenuOpen && playbackSpeedToggle && playerSettingsPanel) {
+                    if (!playbackSpeedToggle.contains(target) && !playerSettingsPanel.contains(target)) {
+                        setSpeedMenuOpen(false);
+                    }
+                }
+
+                if (isVolumeMenuOpen && playerMuteToggle && playerVolumePanel) {
+                    if (!playerMuteToggle.contains(target) && !playerVolumePanel.contains(target)) {
+                        setVolumeMenuOpen(false);
+                    }
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') {
+                    return;
+                }
+
+                if (isSpeedMenuOpen) {
+                    setSpeedMenuOpen(false);
+                }
+
+                if (isVolumeMenuOpen) {
+                    setVolumeMenuOpen(false);
+                }
+            });
+
+            if (playerUi) {
+                playerUi.addEventListener('pointerdown', () => {
+                    updatePlayerPlayButtons();
+                });
+            }
 
             setNormalModeChatHeight();
             if (videoPlayerWrap && typeof ResizeObserver !== 'undefined') {
@@ -1029,15 +1543,33 @@
                 chatHeightObserver.observe(videoPlayerWrap);
             }
 
-            document.addEventListener('fullscreenchange', applyLayoutState);
-            window.addEventListener('resize', () => {
-                if (isNativeFullscreenLayout() || isBrowserExpandedLayout()) {
-                    const current = readFullscreenChatWidth();
-                    setFullscreenChatWidth(current ?? Math.floor(window.innerWidth * 0.34), false);
-                    return;
+            document.addEventListener('fullscreenchange', () => {
+                updatePlayerFullscreenButton();
+                updatePlayerChatRestoreButton();
+                showFullscreenControls();
+                if (isPlayerFullscreen()) {
+                    setFullscreenChatMode(readPersistedFullscreenChatMode(), false);
+                    if (videoDetailContent.classList.contains('chat-mode-side')) {
+                        setFullscreenSideChatWidth(readPersistedFullscreenSideChatWidth(), false);
+                    }
+                    void syncChatTimeline(liveOffsetSeconds, true);
+                } else {
+                    unlockOrientationIfSupported();
+                    stopSideChatResize();
                 }
 
+                updateChatResizeHandleVisibility();
+                updateFullscreenOverlayChatMetrics();
+            });
+
+            window.addEventListener('resize', () => {
                 setNormalModeChatHeight();
+                updatePlayerTimelineUi();
+                if (isFullscreenSideChatMode()) {
+                    const current = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-side-chat-width').trim();
+                    setFullscreenSideChatWidth(current || readPersistedFullscreenSideChatWidth(), false);
+                }
+                updateFullscreenOverlayChatMetrics();
             });
 
             if (chatList) {
@@ -1056,49 +1588,10 @@
                 });
             }
 
-            for (const button of fullscreenChatToggleButtons) {
+            for (const button of chatModeButtons) {
                 button.addEventListener('click', () => {
-                    void toggleBrowserExpandedLayout();
-                });
-            }
-
-            for (const button of nativeFullscreenToggleButtons) {
-                button.addEventListener('click', () => {
-                    void toggleNativeFullscreenLayout();
-                });
-            }
-
-            if (chatResizeHandle) {
-                chatResizeHandle.addEventListener('pointerdown', (event) => {
-                    if (!videoDetailContent || (!isNativeFullscreenLayout() && !isBrowserExpandedLayout())) {
-                        return;
-                    }
-
-                    isChatResizing = true;
-                    activeResizePointerId = event.pointerId;
-                    document.body.classList.add('is-chat-resizing');
-                    chatResizeHandle.setPointerCapture(event.pointerId);
-                    event.preventDefault();
-                });
-
-                chatResizeHandle.addEventListener('pointermove', (event) => {
-                    if (!isChatResizing || activeResizePointerId !== event.pointerId) {
-                        return;
-                    }
-
-                    handleResizePointerMove(event);
-                });
-
-                chatResizeHandle.addEventListener('pointerup', (event) => {
-                    if (activeResizePointerId !== event.pointerId) {
-                        return;
-                    }
-
-                    stopResizePointerSession();
-                });
-
-                chatResizeHandle.addEventListener('pointercancel', () => {
-                    stopResizePointerSession();
+                    const mode = button.getAttribute('data-chat-mode') || 'side';
+                    setFullscreenChatMode(mode);
                 });
             }
 
@@ -1229,25 +1722,225 @@
                 return NaN;
             };
 
+            const isDirectLiveMode = () => Boolean(isLive && !inDvrMode);
+
+            const formatPlaybackClock = (rawSeconds) => {
+                const totalSeconds = Math.max(Number.isFinite(rawSeconds) ? Math.floor(rawSeconds) : 0, 0);
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+                if (hours > 0) {
+                    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                }
+
+                return `${minutes}:${String(seconds).padStart(2, '0')}`;
+            };
+
+            const updatePlayerFullscreenButton = () => {
+                if (!playerFullscreenToggle) {
+                    return;
+                }
+
+                const isFullscreen = isPlayerFullscreen();
+                const nextLabel = isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen';
+                playerFullscreenToggle.setAttribute('aria-label', nextLabel);
+                setControlButtonIcon(playerFullscreenToggle, isFullscreen ? 'fullscreen-exit' : 'fullscreen-enter', nextLabel);
+            };
+
+            const updatePlayerChatRestoreButton = () => {
+                if (!playerChatRestoreButton || !videoDetailContent) {
+                    return;
+                }
+
+                const shouldShow = isPlayerFullscreen() && videoDetailContent.classList.contains('chat-mode-hidden');
+                playerChatRestoreButton.hidden = !shouldShow;
+            };
+
+            const updatePlayerPlayButtons = () => {
+                const isPaused = player.paused;
+                if (videoPlayerWrap) {
+                    videoPlayerWrap.classList.toggle('is-playing', !isPaused);
+                }
+
+                if (playerPlayToggle) {
+                    const nextLabel = isPaused ? 'Play video' : 'Pause video';
+                    playerPlayToggle.setAttribute('aria-label', nextLabel);
+                    setControlButtonIcon(playerPlayToggle, isPaused ? 'play' : 'pause', nextLabel);
+                }
+
+                if (playerCenterToggle) {
+                    const nextLabel = isPaused ? 'Play video' : 'Pause video';
+                    playerCenterToggle.setAttribute('aria-label', nextLabel);
+                    setControlButtonIcon(playerCenterToggle, isPaused ? 'play' : 'pause', nextLabel);
+                }
+            };
+
+            const updatePlayerVolumeUi = () => {
+                if (playerVolumeSlider) {
+                    playerVolumeSlider.value = String(player.muted ? 0 : Math.max(0, Math.min(1, player.volume)));
+                }
+
+                if (playerMuteToggle) {
+                    const muted = player.muted || player.volume <= 0;
+                    const nextLabel = muted ? 'Unmute audio' : 'Mute audio';
+                    playerMuteToggle.setAttribute('aria-label', nextLabel);
+                    setControlButtonIcon(playerMuteToggle, muted ? 'mute' : 'volume', nextLabel);
+                }
+            };
+
+            const updatePlayerTimelineUi = () => {
+                const mediaEnd = getMediaEnd();
+                const hasTimeline = Number.isFinite(mediaEnd) && mediaEnd > 0;
+                const currentTime = Number.isFinite(player.currentTime) ? Math.max(player.currentTime, 0) : 0;
+                const directLiveModeOn = Boolean(isLive && isDirectLiveMode());
+                const canSeek = hasTimeline && !directLiveModeOn;
+                const remainingTime = hasTimeline ? Math.max(mediaEnd - currentTime, 0) : 0;
+                const totalTimeDisplay = hasTimeline ? formatPlaybackClock(mediaEnd) : formatPlaybackClock(currentTime);
+
+                if (playerSeekSlider) {
+                    playerSeekSlider.max = hasTimeline ? String(mediaEnd) : '0';
+                    playerSeekSlider.step = String(playerSeekStepSeconds);
+                    playerSeekSlider.disabled = !canSeek;
+                    playerSeekSlider.hidden = directLiveModeOn;
+
+                    if (!isSeekingWithSlider && !playerSeekSlider.hidden) {
+                        const nextValue = hasTimeline ? Math.min(currentTime, mediaEnd) : 0;
+                        playerSeekSlider.value = String(nextValue);
+                    }
+                }
+
+                if (playerLiveInlineControls) {
+                    playerLiveInlineControls.hidden = !directLiveModeOn;
+                }
+
+                if (playerProgressRow) {
+                    playerProgressRow.classList.toggle('is-direct-live', directLiveModeOn);
+                }
+
+                if (playerCurrentTime) {
+                    const showRemaining = timeMetricShowsRemaining && hasTimeline;
+                    playerCurrentTime.disabled = !hasTimeline;
+                    playerCurrentTime.classList.toggle('is-toggleable', hasTimeline);
+                    if (showRemaining) {
+                        playerCurrentTime.textContent = `-${formatPlaybackClock(remainingTime)}`;
+                        playerCurrentTime.setAttribute('aria-label', 'Show elapsed time');
+                    } else {
+                        playerCurrentTime.textContent = formatPlaybackClock(currentTime);
+                        playerCurrentTime.setAttribute('aria-label', hasTimeline ? 'Show remaining time' : 'Playback time');
+                    }
+                }
+
+                if (playerInlineTotalTime) {
+                    playerInlineTotalTime.hidden = !directLiveModeOn;
+                    playerInlineTotalTime.textContent = totalTimeDisplay;
+                }
+
+                if (playerDurationTime) {
+                    playerDurationTime.hidden = directLiveModeOn;
+                    playerDurationTime.textContent = totalTimeDisplay;
+                }
+            };
+
+            const updateCustomPlayerUi = () => {
+                updatePlayerPlayButtons();
+                updatePlayerVolumeUi();
+                updatePlayerTimelineUi();
+                updatePlayerFullscreenButton();
+                updatePlayerChatRestoreButton();
+                showFullscreenControls();
+            };
+
+            const togglePlayerPlayback = () => {
+                if (player.paused) {
+                    tryPlay();
+                    return;
+                }
+
+                player.pause();
+            };
+
+            const setPlayerVolume = (rawValue) => {
+                const nextValue = Math.max(0, Math.min(1, Number(rawValue)));
+                if (!Number.isFinite(nextValue)) {
+                    return;
+                }
+
+                player.volume = nextValue;
+                player.muted = nextValue <= 0;
+                updatePlayerVolumeUi();
+            };
+
+            const togglePlayerMute = () => {
+                const muted = player.muted || player.volume <= 0;
+                if (muted) {
+                    const restoredVolume = player.volume > 0 ? player.volume : 1;
+                    player.volume = Math.max(restoredVolume, 0.1);
+                    player.muted = false;
+                } else {
+                    player.muted = true;
+                }
+
+                updatePlayerVolumeUi();
+            };
+
+            const seekToTimelinePosition = (rawValue) => {
+                const mediaEnd = getMediaEnd();
+                if (!Number.isFinite(mediaEnd) || mediaEnd <= 0) {
+                    return;
+                }
+
+                const parsed = Number(rawValue);
+                if (!Number.isFinite(parsed)) {
+                    return;
+                }
+
+                const clamped = Math.max(0, Math.min(mediaEnd, parsed));
+                try {
+                    player.currentTime = clamped;
+                } catch (_error) {
+                    return;
+                }
+
+                updatePlayerTimelineUi();
+                void syncChatTimeline(liveOffsetSeconds, true);
+            };
+
+            const togglePlayerFullscreen = async () => {
+                if (!videoDetailContent || !document.fullscreenEnabled) {
+                    return;
+                }
+
+                try {
+                    if (isPlayerFullscreen()) {
+                        await document.exitFullscreen();
+                    } else {
+                        await videoDetailContent.requestFullscreen();
+                        await lockLandscapeOnMobile();
+                    }
+                } catch (_error) {
+                    // Ignore fullscreen API errors.
+                }
+
+                updatePlayerFullscreenButton();
+                showFullscreenControls();
+            };
+
             const updateModeControls = () => {
                 if (liveModeToggleButton) {
                     const liveOn = !inDvrMode;
                     liveModeToggleButton.classList.toggle('is-live-edge', liveOn);
-                    liveModeToggleButton.textContent = liveOn ? 'Live Mode: On' : 'Live Mode: Off';
+                    liveModeToggleButton.textContent = 'LIVE';
+                    liveModeToggleButton.setAttribute('aria-label', liveOn ? 'Switch to DVR mode' : 'Return to live mode');
 
-                    if (refreshButton) {
-                        refreshButton.hidden = false;
-                        refreshButton.textContent = liveOn ? 'Refresh Live' : 'Refresh Snapshot';
-                    }
-
-                    if (liveModeHint) {
-                        liveModeHint.textContent = liveOn
-                            ? `Direct live playback is active with a ${liveOffsetSeconds}s buffer. Refresh uses a smooth rejoin buffer.`
-                            : 'Frozen DVR snapshot mode. Scrub freely, then refresh for newest data.';
+                    if (snapshotRefreshButton) {
+                        snapshotRefreshButton.hidden = false;
+                        snapshotRefreshButton.setAttribute('aria-label', liveOn ? 'Refresh live' : 'Refresh snapshot');
                     }
                 }
 
                 updateChatSyncMode(liveOffsetSeconds);
+                syncPlaybackSpeedForMode();
+                updateCustomPlayerUi();
             };
 
             const seekNearNewestBuffered = (offsetSeconds = liveOffsetSeconds) => {
@@ -1265,6 +1958,104 @@
                 }
 
                 return true;
+            };
+
+            const seekByGestureSeconds = (deltaSeconds) => {
+                if (!Number.isFinite(deltaSeconds) || deltaSeconds === 0) {
+                    return;
+                }
+
+                const mediaEnd = getMediaEnd();
+                const current = Number.isFinite(player.currentTime) ? player.currentTime : 0;
+                let target = current + deltaSeconds;
+
+                if (Number.isFinite(mediaEnd) && mediaEnd > 0) {
+                    target = Math.min(target, Math.max(mediaEnd - 0.05, 0));
+                }
+
+                target = Math.max(target, 0);
+
+                try {
+                    player.currentTime = target;
+                } catch (_error) {
+                    return;
+                }
+
+                showSeekGesture(deltaSeconds < 0 ? 'back' : 'forward');
+                void syncChatTimeline(liveOffsetSeconds, true);
+            };
+
+            const resolveGestureSide = (clientX) => {
+                const rect = player.getBoundingClientRect();
+                if (rect.width <= 0) {
+                    return '';
+                }
+
+                const relativeX = clientX - rect.left;
+                if (relativeX < 0 || relativeX > rect.width) {
+                    return '';
+                }
+
+                return relativeX < rect.width / 2 ? 'back' : 'forward';
+            };
+
+            const deactivateHoldBoost = () => {
+                clearHoldBoostTimer();
+                holdPointerId = null;
+
+                if (!holdBoostActive) {
+                    return;
+                }
+
+                holdBoostActive = false;
+                setHoldGestureVisible(false);
+                applyPlaybackSpeed(holdBoostRestoreSpeed);
+            };
+
+            const maybeHandleTouchDoubleTap = (event) => {
+                if (event.pointerType !== 'touch') {
+                    return;
+                }
+
+                const side = resolveGestureSide(event.clientX);
+                if (!side) {
+                    resetTouchTapState();
+                    return;
+                }
+
+                const now = Date.now();
+                const distance = Math.hypot(event.clientX - lastTouchTapX, event.clientY - lastTouchTapY);
+                const isDoubleTap = lastTouchTapAt > 0
+                    && (now - lastTouchTapAt) <= doubleTapMaxDelayMs
+                    && side === lastTouchTapSide
+                    && distance <= 128;
+
+                if (isDoubleTap) {
+                    event.preventDefault();
+                    resetTouchTapState();
+                    seekByGestureSeconds(side === 'back' ? -gestureSeekSeconds : gestureSeekSeconds);
+                    return;
+                }
+
+                lastTouchTapAt = now;
+                lastTouchTapSide = side;
+                lastTouchTapX = event.clientX;
+                lastTouchTapY = event.clientY;
+            };
+
+            const scheduleHoldBoost = () => {
+                clearHoldBoostTimer();
+                holdBoostTimer = window.setTimeout(() => {
+                    holdBoostTimer = null;
+                    if (holdPointerId === null || holdBoostActive || isPlaybackSpeedLocked()) {
+                        return;
+                    }
+
+                    holdBoostRestoreSpeed = effectivePlaybackSpeed;
+                    holdBoostActive = true;
+                    applyPlaybackSpeed(holdBoostPlaybackSpeed);
+                    setHoldGestureVisible(true);
+                }, holdBoostDelayMs);
             };
 
             const startNearLiveEdge = (offsetSeconds = liveOffsetSeconds) => {
@@ -1369,9 +2160,13 @@
             };
 
             setLiveOffsetSeconds(readPersistedLiveOffsetSeconds(), false);
-            setChatOffsetSeconds(readPersistedChatOffsetSeconds(), false);
-            applyLayoutState();
+            preferredPlaybackSpeed = readPersistedPlaybackSpeed();
+            holdBoostRestoreSpeed = preferredPlaybackSpeed;
+            applyPlaybackSpeed(preferredPlaybackSpeed);
+            setFullscreenChatMode(readPersistedFullscreenChatMode(), false);
+            setFullscreenSideChatWidth(readPersistedFullscreenSideChatWidth(), false);
             updateModeControls();
+            updateFullscreenOverlayChatMetrics();
 
             if (isLive) {
                 switchToDirectLive();
@@ -1385,8 +2180,12 @@
                 lastProgressTime = player.currentTime;
                 setNormalModeChatHeight();
                 updateModeControls();
+                updateCustomPlayerUi();
                 void syncChatTimeline(liveOffsetSeconds, true);
             });
+
+            player.addEventListener('play', () => showFullscreenControls());
+            player.addEventListener('pause', () => showFullscreenControls());
 
             player.addEventListener('timeupdate', () => {
                 if (!Number.isFinite(lastProgressTime) || player.currentTime > (lastProgressTime + 0.1)) {
@@ -1401,17 +2200,22 @@
                 if (!isLive || inDvrMode) {
                     void syncChatTimeline(liveOffsetSeconds);
                 }
+
+                updatePlayerTimelineUi();
             });
 
             player.addEventListener('seeking', () => {
+                updatePlayerTimelineUi();
                 void syncChatTimeline(liveOffsetSeconds, true);
             });
 
             player.addEventListener('seeked', () => {
+                updatePlayerTimelineUi();
                 void syncChatTimeline(liveOffsetSeconds, true);
             });
 
             player.addEventListener('pause', () => {
+                updateCustomPlayerUi();
                 void syncChatTimeline(liveOffsetSeconds, true);
             });
 
@@ -1442,7 +2246,125 @@
                     }
                 }
 
+                updateCustomPlayerUi();
                 void syncChatTimeline(liveOffsetSeconds, true);
+            });
+
+            player.addEventListener('durationchange', () => {
+                updatePlayerTimelineUi();
+            });
+
+            player.addEventListener('volumechange', () => {
+                updatePlayerVolumeUi();
+            });
+
+            player.addEventListener('loadedmetadata', () => {
+                syncPlaybackSpeedForMode();
+                updateCustomPlayerUi();
+            });
+
+            for (const button of playbackSpeedButtons) {
+                button.addEventListener('click', () => {
+                    const requestedSpeed = normalizePlaybackSpeed(button.getAttribute('data-playback-speed') || '1');
+                    if (isPlaybackSpeedLocked()) {
+                        return;
+                    }
+
+                    preferredPlaybackSpeed = requestedSpeed;
+                    applyPlaybackSpeed(requestedSpeed, { persist: true });
+                    setSpeedMenuOpen(false);
+                });
+            }
+
+            player.addEventListener('dblclick', (event) => {
+                if (event.button !== 0) {
+                    return;
+                }
+
+                const side = resolveGestureSide(event.clientX);
+                if (!side) {
+                    return;
+                }
+
+                event.preventDefault();
+                seekByGestureSeconds(side === 'back' ? -gestureSeekSeconds : gestureSeekSeconds);
+            });
+
+            player.addEventListener('pointerdown', (event) => {
+                showFullscreenControls();
+
+                if (event.button !== 0 || event.isPrimary === false) {
+                    return;
+                }
+
+                holdPointerId = event.pointerId;
+                holdPointerStartX = event.clientX;
+                holdPointerStartY = event.clientY;
+                scheduleHoldBoost();
+            });
+
+            player.addEventListener('touchstart', () => {
+                showFullscreenControls();
+            }, { passive: true });
+
+            videoPlayerWrap.addEventListener('pointermove', () => { showFullscreenControls(); });
+            player.addEventListener('pointermove', (event) => {
+                if (event.pointerId !== holdPointerId) {
+                    return;
+                }
+
+                const distance = Math.hypot(event.clientX - holdPointerStartX, event.clientY - holdPointerStartY);
+                if (distance > holdBoostMoveTolerancePx) {
+                    clearHoldBoostTimer();
+                }
+            });
+
+            player.addEventListener('pointerup', (event) => {
+                if (event.pointerId !== holdPointerId) {
+                    return;
+                }
+
+                clearHoldBoostTimer();
+                if (holdBoostActive) {
+                    holdPointerId = null;
+                    deactivateHoldBoost();
+                    resetTouchTapState();
+                    return;
+                }
+
+                maybeHandleTouchDoubleTap(event);
+                holdPointerId = null;
+            });
+
+            player.addEventListener('pointercancel', () => {
+                deactivateHoldBoost();
+                resetTouchTapState();
+            });
+
+            player.addEventListener('pointerleave', (event) => {
+                if (event.pointerType !== 'mouse') {
+                    return;
+                }
+
+                deactivateHoldBoost();
+            });
+
+            player.addEventListener('contextmenu', (event) => {
+                if ((isMobileViewport() || holdBoostActive || holdPointerId !== null) && event.cancelable) {
+                    event.preventDefault();
+                }
+                deactivateHoldBoost();
+            });
+
+            videoPlayerWrap.addEventListener('contextmenu', (event) => {
+                if (isMobileViewport() && event.cancelable) {
+                    event.preventDefault();
+                }
+            });
+
+            window.addEventListener('blur', () => {
+                deactivateHoldBoost();
+                resetTouchTapState();
             });
 
             if (isLive) {
@@ -1471,22 +2393,28 @@
                 });
             }
 
-            if (refreshButton) {
-                refreshButton.addEventListener('click', () => {
-                    refreshButton.disabled = true;
+            const runRefreshAction = () => {
+                if (snapshotRefreshButton) {
+                    snapshotRefreshButton.disabled = true;
+                }
 
-                    if (inDvrMode) {
-                        switchToDvrMode(player.currentTime);
-                    } else {
-                        switchToDirectLive(true);
+                if (inDvrMode) {
+                    switchToDvrMode(player.currentTime);
+                } else {
+                    switchToDirectLive(true);
+                }
+
+                void syncChatTimeline(liveOffsetSeconds, true);
+
+                window.setTimeout(() => {
+                    if (snapshotRefreshButton) {
+                        snapshotRefreshButton.disabled = false;
                     }
+                }, 350);
+            };
 
-                    void syncChatTimeline(liveOffsetSeconds, true);
-
-                    window.setTimeout(() => {
-                        refreshButton.disabled = false;
-                    }, 350);
-                });
+            if (snapshotRefreshButton) {
+                snapshotRefreshButton.addEventListener('click', runRefreshAction);
             }
 
             if (liveBufferSlider) {
@@ -1553,47 +2481,20 @@
                 });
             }
 
-            if (chatOffsetSlider) {
-                chatOffsetSlider.addEventListener('input', () => {
-                    setChatOffsetSeconds(chatOffsetSlider.value);
-                    updateModeControls();
-                    void syncChatTimeline(liveOffsetSeconds, true);
-                });
-
-                chatOffsetSlider.addEventListener('change', () => {
-                    void syncChatTimeline(liveOffsetSeconds, true);
-                });
-            }
-
-            if (chatOffsetInput) {
-                const applyChatOffsetInput = () => {
-                    const rawValue = String(chatOffsetInput.value ?? '').trim();
-                    if (rawValue === '') {
-                        setChatOffsetSeconds(chatOffsetSecondsDefault);
-                        highlightDefaultedInput(chatOffsetInput);
-                        updateModeControls();
-                        void syncChatTimeline(liveOffsetSeconds, true);
-                        return;
-                    }
-
-                    const parsed = Number.parseInt(rawValue, 10);
-                    if (!Number.isFinite(parsed)) {
-                        chatOffsetInput.value = String(chatOffsetSeconds);
-                        return;
-                    }
-
-                    setChatOffsetSeconds(parsed);
-                    updateModeControls();
-                    void syncChatTimeline(liveOffsetSeconds, true);
-                };
-
-                chatOffsetInput.addEventListener('input', applyChatOffsetInput);
-                chatOffsetInput.addEventListener('change', applyChatOffsetInput);
-                chatOffsetInput.addEventListener('blur', applyChatOffsetInput);
-            }
-
             window.addEventListener('beforeunload', stopChatPolling);
+            window.addEventListener('beforeunload', deactivateHoldBoost);
+            window.addEventListener('beforeunload', stopSideChatResize);
         })();
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
