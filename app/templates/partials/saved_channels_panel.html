@@ -1,6 +1,9 @@
-<aside class="side-panel side-left browser-saved-panel" id="saved-panel">
+<aside class="side-panel side-left browser-saved-panel" id="saved-panel" data-refresh-url="{{ url_for('dashboard.saved_channels_panel_partial') }}">
     <section class="panel-shell">
-        <h2 class="panel-title">Saved Channels</h2>
+        <div class="panel-title saved-panel-title-row">
+            <span class="saved-panel-title-text">Saved Channels</span>
+            <button type="button" class="secondary saved-panel-refresh-button" data-saved-panel-refresh>Refresh</button>
+        </div>
         <div class="panel-body">
             <form action="{{ url_for('dashboard.add_channel') }}" method="post" class="row-form start-only">
                 <input type="text" name="channel" placeholder="add channel" required>
@@ -57,7 +60,7 @@
                                             name="enabled"
                                             value="true"
                                             {% if item.auto_record %}checked{% endif %}
-                                            onchange="this.form.submit()"
+                                            onchange="this.form.requestSubmit()"
                                         >
                                         <span class="toggle-slider" aria-hidden="true"></span>
                                         <span class="toggle-label">{{ 'ON' if item.auto_record else 'OFF' }}</span>
@@ -74,7 +77,7 @@
                                             name="enabled"
                                             value="true"
                                             {% if item.chat_record %}checked{% endif %}
-                                            onchange="this.form.submit()"
+                                            onchange="this.form.requestSubmit()"
                                         >
                                         <span class="toggle-slider" aria-hidden="true"></span>
                                         <span class="toggle-label">Chat {{ 'ON' if item.chat_record else 'OFF' }}</span>

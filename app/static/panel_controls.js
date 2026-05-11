@@ -2,17 +2,19 @@
     const mobileQuery = window.matchMedia('(max-width: 980px)');
     const overlay = document.getElementById('panel-overlay');
     const panelButtons = Array.from(document.querySelectorAll('.panel-toggle'));
-    const sidePanels = Array.from(document.querySelectorAll('.side-panel'));
     const desktopToggleButtons = panelButtons.filter((button) => Boolean(button.getAttribute('data-desktop-toggle-class')));
-    const savedList = document.querySelector('.saved-list');
-    const savedSortSelect = document.getElementById('saved-channel-sort');
+    const sortStorageKey = 'vstreamware.saved-channels-sort';
+    let savedPanelRefreshInFlight = false;
 
-    if (panelButtons.length === 0 || sidePanels.length === 0) {
+    const getSidePanels = () => Array.from(document.querySelectorAll('.side-panel'));
+    const getSavedPanel = () => document.getElementById('saved-panel');
+
+    if (panelButtons.length === 0 && getSidePanels().length === 0) {
         return;
     }
 
     const closePanels = () => {
-        for (const panel of sidePanels) {
+        for (const panel of getSidePanels()) {
             panel.classList.remove('is-open');
         }
 
@@ -128,49 +130,7 @@
         document.body.classList.add('panel-open');
     };
 
-    for (const button of panelButtons) {
-        button.addEventListener('click', () => {
-            const desktopToggleClass = getDesktopToggleClass(button);
-            if (!mobileQuery.matches && desktopToggleClass) {
-                const nextCollapsed = !document.body.classList.contains(desktopToggleClass);
-                applyDesktopToggleState(button, nextCollapsed, true);
-                syncDesktopButtons();
-                return;
-            }
-
-            const panelId = button.getAttribute('data-target');
-            if (!panelId) {
-                return;
-            }
-
-            openPanel(panelId);
-        });
-    }
-
-    if (overlay) {
-        overlay.addEventListener('click', closePanels);
-    }
-
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-            closePanels();
-        }
-    });
-
-    const handleViewportChange = () => {
-        closePanels();
-        syncDesktopButtons();
-    };
-
-    if (typeof mobileQuery.addEventListener === 'function') {
-        mobileQuery.addEventListener('change', handleViewportChange);
-    } else if (typeof mobileQuery.addListener === 'function') {
-        mobileQuery.addListener(handleViewportChange);
-    }
-
-    initializeDesktopToggleState();
-
-    const sortSavedChannels = (mode) => {
+    const sortSavedChannels = (savedList, mode) => {
         if (!savedList) {
             return;
         }
@@ -214,8 +174,7 @@
         }
     };
 
-    if (savedList && savedSortSelect) {
-        const sortStorageKey = 'vstreamware.saved-channels-sort';
+    const readSavedSortMode = () => {
         let initialSortMode = 'recent';
         try {
             const persistedSortMode = window.localStorage.getItem(sortStorageKey);
@@ -226,17 +185,206 @@
             initialSortMode = 'recent';
         }
 
-        savedSortSelect.value = initialSortMode;
-        sortSavedChannels(initialSortMode);
+        return initialSortMode;
+    };
 
+    const initializeSavedSortUi = () => {
+        const savedPanel = getSavedPanel();
+        if (!savedPanel) {
+            return;
+        }
+
+        const savedList = savedPanel.querySelector('.saved-list');
+        const savedSortSelect = savedPanel.querySelector('#saved-channel-sort');
+        if (!savedList || !savedSortSelect) {
+            return;
+        }
+
+        const initialSortMode = readSavedSortMode();
+        savedSortSelect.value = initialSortMode;
+        sortSavedChannels(savedList, initialSortMode);
+
+        if (savedSortSelect.getAttribute('data-sort-bound') === 'true') {
+            return;
+        }
+
+        savedSortSelect.setAttribute('data-sort-bound', 'true');
         savedSortSelect.addEventListener('change', () => {
             const mode = savedSortSelect.value === 'name' ? 'name' : 'recent';
-            sortSavedChannels(mode);
+            sortSavedChannels(savedList, mode);
             try {
                 window.localStorage.setItem(sortStorageKey, mode);
             } catch (_error) {
                 // Ignore storage failures.
             }
         });
+    };
+
+    const replaceSavedPanelFromHtml = (html, wasOpen) => {
+        const currentPanel = getSavedPanel();
+        if (!currentPanel || !currentPanel.parentElement) {
+            return;
+        }
+
+        const parser = new DOMParser();
+        const parsed = parser.parseFromString(html, 'text/html');
+        const nextPanel = parsed.querySelector('#saved-panel');
+        if (!nextPanel) {
+            return;
+        }
+
+        currentPanel.replaceWith(nextPanel);
+        if (wasOpen) {
+            nextPanel.classList.add('is-open');
+        }
+
+        initializeSavedSortUi();
+    };
+
+    const refreshSavedPanel = async () => {
+        const savedPanel = getSavedPanel();
+        if (!savedPanel || savedPanelRefreshInFlight) {
+            return;
+        }
+
+        const refreshUrl = String(savedPanel.getAttribute('data-refresh-url') || '').trim();
+        if (!refreshUrl) {
+            return;
+        }
+
+        const wasOpen = savedPanel.classList.contains('is-open');
+        savedPanelRefreshInFlight = true;
+        try {
+            const response = await fetch(refreshUrl, {
+                cache: 'no-store',
+                headers: {
+                    'X-Requested-With': 'vstreamware-saved-panel-refresh',
+                },
+            });
+            if (!response.ok) {
+                throw new Error(`status ${response.status}`);
+            }
+
+            const html = await response.text();
+            replaceSavedPanelFromHtml(html, wasOpen);
+            syncDesktopButtons();
+        } catch (_error) {
+            // Ignore refresh errors and keep current panel state.
+        } finally {
+            savedPanelRefreshInFlight = false;
+        }
+    };
+
+    const submitSavedPanelForm = async (form) => {
+        const actionUrl = String(form.getAttribute('action') || '').trim();
+        if (!actionUrl) {
+            return;
+        }
+
+        const submitter = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        if (submitter && 'disabled' in submitter) {
+            submitter.disabled = true;
+        }
+
+        try {
+            const response = await fetch(actionUrl, {
+                method: 'POST',
+                body: new FormData(form),
+                cache: 'no-store',
+                headers: {
+                    'X-Requested-With': 'vstreamware-saved-panel-action',
+                },
+                redirect: 'follow',
+            });
+            if (!response.ok) {
+                throw new Error(`status ${response.status}`);
+            }
+
+            await refreshSavedPanel();
+        } catch (_error) {
+            // Ignore action errors and keep current panel state.
+        } finally {
+            if (submitter && 'disabled' in submitter) {
+                submitter.disabled = false;
+            }
+        }
+    };
+
+    for (const button of panelButtons) {
+        button.addEventListener('click', () => {
+            const desktopToggleClass = getDesktopToggleClass(button);
+            if (!mobileQuery.matches && desktopToggleClass) {
+                const nextCollapsed = !document.body.classList.contains(desktopToggleClass);
+                applyDesktopToggleState(button, nextCollapsed, true);
+                syncDesktopButtons();
+                return;
+            }
+
+            const panelId = button.getAttribute('data-target');
+            if (!panelId) {
+                return;
+            }
+
+            openPanel(panelId);
+        });
     }
+
+    if (overlay) {
+        overlay.addEventListener('click', closePanels);
+    }
+
+    document.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+
+        const refreshButton = target.closest('[data-saved-panel-refresh]');
+        if (!refreshButton) {
+            return;
+        }
+
+        event.preventDefault();
+        void refreshSavedPanel();
+    });
+
+    document.addEventListener('submit', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLFormElement)) {
+            return;
+        }
+
+        const savedPanel = getSavedPanel();
+        if (!savedPanel || !savedPanel.contains(target)) {
+            return;
+        }
+
+        const method = String(target.getAttribute('method') || target.method || 'get').trim().toLowerCase();
+        if (method !== 'post') {
+            return;
+        }
+
+        event.preventDefault();
+        void submitSavedPanelForm(target);
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closePanels();
+        }
+    });
+
+    const handleViewportChange = () => {
+        closePanels();
+        syncDesktopButtons();
+    };
+
+    if (typeof mobileQuery.addEventListener === 'function') {
+        mobileQuery.addEventListener('change', handleViewportChange);
+    } else if (typeof mobileQuery.addListener === 'function') {
+        mobileQuery.addListener(handleViewportChange);
+    }
+
+    initializeDesktopToggleState();
+    initializeSavedSortUi();
 })();

@@ -91,6 +91,25 @@ body.panel-open {
     border-bottom: 1px solid #2f4a64;
 }
 
+.saved-panel-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.saved-panel-title-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.saved-panel-refresh-button {
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1;
+}
+
 .panel-overlay {
     position: fixed;
     inset: 0;
@@ -657,13 +676,28 @@ button.danger {
         align-content: stretch;
     }
 
+    .browser-page-video .browser-layout {
+        --video-page-usable-height: calc(100dvh - 210px);
+        height: min(82vh, var(--video-page-usable-height));
+        max-height: var(--video-page-usable-height);
+        min-height: 0;
+    }
+
+    .browser-page-video .browser-layout > .side-panel {
+        height: 100%;
+        max-height: 100%;
+    }
+
+    .browser-page-video .browser-layout > .side-panel .panel-shell {
+        max-height: 100%;
+    }
+
     .browser-page-video .video-detail-main-column {
         height: 100%;
         min-height: 0;
     }
 
     .browser-page-video .video-detail-content {
-        --video-page-usable-height: calc(100dvh - 210px);
         height: min(82vh, var(--video-page-usable-height));
         max-height: var(--video-page-usable-height);
         min-height: 0;

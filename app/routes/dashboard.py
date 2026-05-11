@@ -1101,6 +1101,17 @@ def status() -> object:
     return jsonify(dashboard_state)
 
 
+@dashboard_bp.get("/channels/panel")
+def saved_channels_panel_partial() -> str:
+    services = get_services(current_app)
+    services["auto_recorder"].request_refresh()
+    dashboard_state = _build_dashboard_state(services)
+    return render_template(
+        "partials/saved_channels_panel.html",
+        saved_channels=dashboard_state["saved_channels"],
+    )
+
+
 @dashboard_bp.get("/recordings/index")
 def recordings_index() -> object:
     services = get_services(current_app)
