@@ -4,7 +4,9 @@
     const panelButtons = Array.from(document.querySelectorAll('.panel-toggle'));
     const desktopToggleButtons = panelButtons.filter((button) => Boolean(button.getAttribute('data-desktop-toggle-class')));
     const sortStorageKey = 'vstreamware.saved-channels-sort';
+    const savedPanelPollMs = 3000;
     let savedPanelRefreshInFlight = false;
+    let savedPanelPollTimer = null;
 
     const getSidePanels = () => Array.from(document.querySelectorAll('.side-panel'));
     const getSavedPanel = () => document.getElementById('saved-panel');
@@ -310,6 +312,45 @@
         }
     };
 
+    const shouldSkipAutomaticSavedPanelRefresh = () => {
+        const savedPanel = getSavedPanel();
+        if (!savedPanel) {
+            return true;
+        }
+
+        const activeElement = document.activeElement;
+        if (!(activeElement instanceof Element) || !savedPanel.contains(activeElement)) {
+            return false;
+        }
+
+        return activeElement instanceof HTMLInputElement
+            || activeElement instanceof HTMLSelectElement
+            || activeElement instanceof HTMLTextAreaElement;
+    };
+
+    const stopSavedPanelPolling = () => {
+        if (savedPanelPollTimer === null) {
+            return;
+        }
+
+        window.clearInterval(savedPanelPollTimer);
+        savedPanelPollTimer = null;
+    };
+
+    const startSavedPanelPolling = () => {
+        if (savedPanelPollTimer !== null || !getSavedPanel()) {
+            return;
+        }
+
+        savedPanelPollTimer = window.setInterval(() => {
+            if (document.hidden || shouldSkipAutomaticSavedPanelRefresh()) {
+                return;
+            }
+
+            void refreshSavedPanel();
+        }, savedPanelPollMs);
+    };
+
     for (const button of panelButtons) {
         button.addEventListener('click', () => {
             const desktopToggleClass = getDesktopToggleClass(button);
@@ -374,6 +415,16 @@
         }
     });
 
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            return;
+        }
+
+        void refreshSavedPanel();
+    });
+
+    window.addEventListener('beforeunload', stopSavedPanelPolling);
+
     const handleViewportChange = () => {
         closePanels();
         syncDesktopButtons();
@@ -387,4 +438,5 @@
 
     initializeDesktopToggleState();
     initializeSavedSortUi();
+    startSavedPanelPolling();
 })();
