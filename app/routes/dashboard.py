@@ -771,6 +771,7 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
                         "recorded_at": recorded_at,
                         "recorded_at_unix": recorded_at_unix,
                         "size_bytes": int(file_stat.st_size),
+                        "size_label": _format_size_label(int(file_stat.st_size)),
                         "is_live": active_info is not None,
                         "quality": None if active_info is None else active_info.get("quality"),
                         "started_at": started_at,
@@ -837,6 +838,7 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
                 "recorded_at": recorded_dt.isoformat(),
                 "recorded_at_unix": recorded_at_unix,
                 "size_bytes": 0,
+                "size_label": _format_size_label(0),
                 "is_live": True,
                 "quality": active_info.get("quality"),
                 "started_at": started_at_iso,
@@ -1135,6 +1137,27 @@ def view_recording(recording_slug: str) -> object:
         live_buffer_default_seconds=live_buffer_default,
         live_buffer_min_seconds=live_buffer_min,
         live_buffer_max_seconds=live_buffer_max,
+    )
+
+
+@dashboard_bp.get("/recordings/view/<path:recording_slug>/size")
+def recording_size(recording_slug: str) -> object:
+    services = get_services(current_app)
+    catalog = _build_recordings_catalog(
+        services["recording_manager"],
+        services["settings_store"],
+    )
+    record = _find_recording_entry(catalog, recording_slug)
+    if record is None:
+        abort(404)
+
+    size_bytes = int(record.get("size_bytes", 0) or 0)
+    return jsonify(
+        {
+            "size_bytes": size_bytes,
+            "size_label": _format_size_label(size_bytes),
+            "is_live": bool(record.get("is_live")),
+        }
     )
 
 

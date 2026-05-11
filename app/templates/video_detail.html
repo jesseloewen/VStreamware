@@ -15,7 +15,7 @@
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body>
+<body class="browser-page browser-page-video">
     <main class="container">
         <header class="page-header browser-header">
             <h1 class="app-title">
@@ -30,34 +30,48 @@
             <p>Single-video viewer.</p>
         </header>
 
-        <div class="mobile-panel-controls" aria-label="Panel controls">
+        <div class="mobile-panel-controls video-mobile-panel-controls" aria-label="Panel controls">
             {% include 'partials/saved_panel_toggle_button.html' %}
+            <button
+                type="button"
+                class="panel-toggle panel-hamburger video-chat-toolbar-toggle"
+                data-chat-panel-toggle
+                aria-controls="video-chat-panel"
+                aria-expanded="true"
+                aria-label="Hide chat panel"
+            >
+                <span class="hamburger-icon" aria-hidden="true"><span></span><span></span><span></span></span>
+                <span class="panel-toggle-text" data-panel-label>Hide Chat</span>
+            </button>
         </div>
 
         <div class="browser-layout">
             {% include 'partials/saved_channels_panel.html' %}
 
-            <section class="browser-main-column">
-                <section class="card video-detail-card">
-                    <header class="video-detail-header">
-                        <div>
-                            <h2>{{ recording.display_title }}</h2>
-                            <p class="muted">{{ recording.channel }} / {{ recording.day }}</p>
-                        </div>
-                        <div class="video-item-badges">
-                            {% if recording.is_live %}
-                                <span class="badge live">LIVE</span>
-                            {% else %}
-                                <span class="badge neutral">Recorded</span>
-                            {% endif %}
-                            {% if recording.quality %}
-                                <span class="meta-chip">Quality {{ recording.quality }}</span>
-                            {% endif %}
-                        </div>
-                    </header>
+            <section class="browser-main-column video-detail-main-column">
+                <div class="video-detail-content">
+                    <section class="card video-detail-card">
+                        <header class="video-detail-header">
+                            <div>
+                                <h2>{{ recording.display_title }}</h2>
+                                <p class="muted">{{ recording.channel }} / {{ recording.day }}</p>
+                            </div>
+                            <div class="video-item-badges">
+                                {% if recording.is_live or (recording.size_bytes and recording.size_bytes > 0) %}
+                                    <span class="meta-chip video-size-indicator" id="video-size-indicator">{{ recording.size_label if recording.size_label else '0 B' }}</span>
+                                {% endif %}
+                                {% if recording.is_live %}
+                                    <span class="badge live">LIVE</span>
+                                {% else %}
+                                    <span class="badge neutral">Recorded</span>
+                                {% endif %}
+                                {% if recording.quality %}
+                                    <span class="meta-chip">Quality {{ recording.quality }}</span>
+                                {% endif %}
+                            </div>
+                        </header>
 
-                    {% if recording.can_play %}
-                        <div class="video-detail-content">
+                        {% if recording.can_play %}
                             <div class="video-detail-player-column">
                                 <div class="video-detail-player-wrap" id="video-player-shell">
                                     <div class="video-player-stage" id="video-player-stage">
@@ -193,9 +207,17 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="video-chat-resize-handle" id="video-chat-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize side chat panel"></div>
-                            <aside class="video-chat-panel" aria-live="polite">
-                                <header class="video-chat-header">
+                        {% else %}
+                            <div class="video-unavailable">Recording file is not ready for playback yet.</div>
+                        {% endif %}
+
+                    </section>
+
+                    {% if recording.can_play %}
+                        <div class="video-chat-resize-handle" id="video-chat-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize side chat panel"></div>
+                        <aside class="video-chat-panel" id="video-chat-panel" aria-live="polite">
+                            <section class="panel-shell">
+                                <header class="panel-title video-chat-header">
                                     <h3>Chat Replay</h3>
                                     <div class="video-chat-header-actions">
                                         <button type="button" class="video-chat-mode-button" data-chat-mode="side" aria-label="Chat side panel" aria-pressed="true">Side</button>
@@ -203,46 +225,27 @@
                                         <button type="button" class="video-chat-mode-button" data-chat-mode="hidden" aria-label="Hide chat" aria-pressed="false">Hide</button>
                                     </div>
                                 </header>
-                                <p class="muted sync-status" id="chat-sync-status">Connecting to chat timeline...</p>
-                                <div class="video-chat-list" id="video-chat-list"></div>
-                                <div class="video-chat-footer-controls">
-                                    <button type="button" class="button-link chat-jump-latest" id="chat-jump-latest" hidden>Jump To Latest</button>
-                                    {% if recording.is_live %}
-                                        <div class="chat-sync-source-wrap" role="group" aria-label="Chat sync source">
-                                            <span id="chat-sync-mode" class="muted chat-sync-mode-label">Playback Chat</span>
-                                            <label class="toggle-switch chat-sync-toggle" for="chat-sync-source-toggle">
-                                                <input id="chat-sync-source-toggle" type="checkbox" role="switch" aria-label="Toggle live chat synchronization">
-                                                <span class="toggle-slider" aria-hidden="true"></span>
-                                                <span id="chat-sync-source-label" class="toggle-label">Playback</span>
-                                            </label>
-                                        </div>
-                                    {% endif %}
+                                <div class="panel-body video-chat-body">
+                                    <p class="muted sync-status" id="chat-sync-status">Connecting to chat timeline...</p>
+                                    <div class="video-chat-list" id="video-chat-list"></div>
+                                    <div class="video-chat-footer-controls">
+                                        <button type="button" class="button-link chat-jump-latest" id="chat-jump-latest" hidden>Jump To Latest</button>
+                                        {% if recording.is_live %}
+                                            <div class="chat-sync-source-wrap" role="group" aria-label="Chat sync source">
+                                                <span id="chat-sync-mode" class="muted chat-sync-mode-label">Playback Chat</span>
+                                                <label class="toggle-switch chat-sync-toggle" for="chat-sync-source-toggle">
+                                                    <input id="chat-sync-source-toggle" type="checkbox" role="switch" aria-label="Toggle live chat synchronization">
+                                                    <span class="toggle-slider" aria-hidden="true"></span>
+                                                    <span id="chat-sync-source-label" class="toggle-label">Playback</span>
+                                                </label>
+                                            </div>
+                                        {% endif %}
+                                    </div>
                                 </div>
-                            </aside>
-                        </div>
-                    {% else %}
-                        <div class="video-unavailable">Recording file is not ready for playback yet.</div>
+                            </section>
+                        </aside>
                     {% endif %}
-
-                    <dl class="video-meta-grid">
-                        <div>
-                            <dt>Recorded</dt>
-                            <dd class="utc-datetime" data-utc="{{ recording.recorded_at if recording.recorded_at else '' }}">{{ recording.recorded_at if recording.recorded_at else 'Unknown' }}</dd>
-                        </div>
-                        <div>
-                            <dt>Size</dt>
-                            <dd>{{ recording.size_bytes }} bytes</dd>
-                        </div>
-                        <div class="wide">
-                            <dt>File</dt>
-                            <dd>{{ recording.file_name }}</dd>
-                        </div>
-                        <div class="wide">
-                            <dt>Path</dt>
-                            <dd>{{ recording.relative_path }}</dd>
-                        </div>
-                    </dl>
-                </section>
+                </div>
             </section>
         </div>
     </main>
@@ -288,14 +291,17 @@
             const chatSyncMode = document.getElementById('chat-sync-mode');
             const chatSyncSourceToggle = document.getElementById('chat-sync-source-toggle');
             const chatSyncSourceLabel = document.getElementById('chat-sync-source-label');
+            const videoSizeIndicator = document.getElementById('video-size-indicator');
             const videoDetailContent = document.querySelector('.video-detail-content');
             const videoPlayerWrap = document.querySelector('.video-detail-player-wrap');
             const chatPanel = document.querySelector('.video-chat-panel');
             const chatResizeHandle = document.getElementById('video-chat-resize-handle');
             const chatModeButtons = Array.from(document.querySelectorAll('[data-chat-mode]'));
+            const chatPanelToggleButtons = Array.from(document.querySelectorAll('[data-chat-panel-toggle]'));
             const displayTimezonePreference = {{ display_timezone | tojson }};
             const isLive = {{ 'true' if recording.is_live else 'false' }};
             const chatUrl = {{ recording.chat_url | tojson }};
+            const recordingSizeUrl = {{ url_for('dashboard.recording_size', recording_slug=recording.view_slug) | tojson }};
             const releaseTranscodeUrl = {{ url_for('dashboard.release_transcode_cache') | tojson }};
             let recordingStartUtcMs = {{ recording.recording_start_utc_ms if recording.recording_start_utc_ms is not none else 'null' }};
             const liveOffsetSecondsDefault = {{ live_buffer_default_seconds }};
@@ -306,6 +312,7 @@
             const playbackSpeedStorageKey = 'vstreamware.playback-speed';
             const fullscreenChatModeStorageKey = 'vstreamware.fullscreen-chat-mode';
             const fullscreenSideChatWidthStorageKey = 'vstreamware.fullscreen-side-chat-width';
+            const normalChatCollapsedStorageKey = 'vstreamware.normal-chat-collapsed';
             const playbackSpeedOptions = [0.75, 1, 1.25, 1.5, 2];
             const fullscreenSideChatDefaultRatio = 0.34;
             const fullscreenSideChatMinWidthDesktopPx = 280;
@@ -449,6 +456,83 @@
                 }
             };
 
+            const readPersistedNormalChatCollapsed = () => {
+                try {
+                    const stored = window.localStorage.getItem(normalChatCollapsedStorageKey);
+                    const normalized = String(stored || '').trim().toLowerCase();
+                    return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+                } catch (_error) {
+                    return false;
+                }
+            };
+
+            const isNormalChatPanelCollapsed = () => Boolean(
+                videoDetailContent
+                && videoDetailContent.classList.contains('chat-panel-collapsed')
+            );
+
+            const updateChatPanelToggleButtons = () => {
+                const fullscreenHidden = Boolean(
+                    videoDetailContent
+                    && videoDetailContent.classList.contains('chat-mode-hidden')
+                );
+                const collapsed = isPlayerFullscreen() ? fullscreenHidden : isNormalChatPanelCollapsed();
+                const nextLabel = collapsed ? 'Show Chat' : 'Hide Chat';
+                const nextAriaLabel = collapsed ? 'Show chat panel' : 'Hide chat panel';
+
+                for (const button of chatPanelToggleButtons) {
+                    button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                    button.setAttribute('aria-label', nextAriaLabel);
+                    button.classList.toggle('is-active', !collapsed);
+                    const labelElement = button.querySelector('[data-panel-label]');
+                    if (labelElement) {
+                        labelElement.textContent = nextLabel;
+                    }
+                }
+            };
+
+            const setNormalChatPanelCollapsed = (collapsed, persist = true) => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                videoDetailContent.classList.toggle('chat-panel-collapsed', Boolean(collapsed));
+
+                if (persist) {
+                    try {
+                        window.localStorage.setItem(normalChatCollapsedStorageKey, collapsed ? '1' : '0');
+                    } catch (_error) {
+                        // Ignore storage failures.
+                    }
+                }
+
+                setNormalModeChatHeight();
+                updatePlayerChatRestoreButton();
+                updateChatPanelToggleButtons();
+            };
+
+            const toggleChatPanelVisibility = () => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                if (isPlayerFullscreen()) {
+                    const isHidden = videoDetailContent.classList.contains('chat-mode-hidden');
+                    if (isHidden) {
+                        const restoreMode = lastVisibleFullscreenChatMode === 'overlay' ? 'overlay' : 'side';
+                        setFullscreenChatMode(restoreMode);
+                    } else {
+                        setFullscreenChatMode('hidden');
+                    }
+
+                    showFullscreenControls();
+                    updateChatPanelToggleButtons();
+                    return;
+                }
+
+                setNormalChatPanelCollapsed(!isNormalChatPanelCollapsed());
+            };
+
             const isFullscreenSideChatMode = () => Boolean(
                 isPlayerFullscreen()
                 && videoDetailContent
@@ -524,6 +608,7 @@
                 updatePlayerChatRestoreButton();
                 updateChatResizeHandleVisibility();
                 updateFullscreenOverlayChatMetrics();
+                updateChatPanelToggleButtons();
 
                 if (persist) {
                     try {
@@ -540,6 +625,11 @@
                 }
 
                 if (isPlayerFullscreen()) {
+                    return;
+                }
+
+                if (videoDetailContent.classList.contains('chat-panel-collapsed')) {
+                    videoDetailContent.style.removeProperty('--video-chat-height');
                     return;
                 }
 
@@ -1341,6 +1431,36 @@
             let chatSyncInFlight = false;
             let chatPollTimer = null;
             let lastChatSyncAt = 0;
+            let sizeSyncInFlight = false;
+
+            const syncLiveSizeIndicator = async () => {
+                if (!isLive || !videoSizeIndicator || !recordingSizeUrl || sizeSyncInFlight) {
+                    return;
+                }
+
+                sizeSyncInFlight = true;
+                try {
+                    const response = await fetch(recordingSizeUrl, {
+                        cache: 'no-store',
+                        headers: {
+                            'X-Requested-With': 'vstreamware-size-sync',
+                        },
+                    });
+                    if (!response.ok) {
+                        throw new Error(`status ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    const sizeLabel = typeof payload.size_label === 'string' ? payload.size_label.trim() : '';
+                    if (sizeLabel) {
+                        videoSizeIndicator.textContent = sizeLabel;
+                    }
+                } catch (_error) {
+                    // Ignore transient size sync failures.
+                } finally {
+                    sizeSyncInFlight = false;
+                }
+            };
 
             const syncChatTimeline = async (liveOffsetSeconds, force = false) => {
                 if (!chatUrl || !player || !chatList || chatSyncInFlight) {
@@ -1419,6 +1539,7 @@
 
                 chatPollTimer = window.setInterval(() => {
                     void syncChatTimeline(liveOffsetSecondsRef());
+                    void syncLiveSizeIndicator();
                 }, 2000);
             };
 
@@ -1574,9 +1695,20 @@
 
             if (playerChatRestoreButton) {
                 playerChatRestoreButton.addEventListener('click', () => {
+                    if (!isPlayerFullscreen()) {
+                        setNormalChatPanelCollapsed(false);
+                        return;
+                    }
+
                     const restoreMode = lastVisibleFullscreenChatMode === 'overlay' ? 'overlay' : 'side';
                     setFullscreenChatMode(restoreMode);
                     showFullscreenControls();
+                });
+            }
+
+            for (const button of chatPanelToggleButtons) {
+                button.addEventListener('click', () => {
+                    toggleChatPanelVisibility();
                 });
             }
 
@@ -1651,6 +1783,7 @@
 
                 updateChatResizeHandleVisibility();
                 updateFullscreenOverlayChatMetrics();
+                updateChatPanelToggleButtons();
             });
 
             window.addEventListener('resize', () => {
@@ -1661,6 +1794,7 @@
                     setFullscreenSideChatWidth(current || readPersistedFullscreenSideChatWidth(), false);
                 }
                 updateFullscreenOverlayChatMetrics();
+                updateChatPanelToggleButtons();
             });
 
             if (chatList) {
@@ -1956,7 +2090,10 @@
                     return;
                 }
 
-                const shouldShow = isPlayerFullscreen() && videoDetailContent.classList.contains('chat-mode-hidden');
+                const shouldShow = (
+                    (isPlayerFullscreen() && videoDetailContent.classList.contains('chat-mode-hidden'))
+                    || (!isPlayerFullscreen() && videoDetailContent.classList.contains('chat-panel-collapsed'))
+                );
                 playerChatRestoreButton.hidden = !shouldShow;
             };
 
@@ -2417,10 +2554,12 @@
             preferredPlaybackSpeed = readPersistedPlaybackSpeed();
             holdBoostRestoreSpeed = preferredPlaybackSpeed;
             applyPlaybackSpeed(preferredPlaybackSpeed);
+            setNormalChatPanelCollapsed(readPersistedNormalChatCollapsed(), false);
             setFullscreenChatMode(readPersistedFullscreenChatMode(), false);
             setFullscreenSideChatWidth(readPersistedFullscreenSideChatWidth(), false);
             updateModeControls();
             updateFullscreenOverlayChatMetrics();
+            updateChatPanelToggleButtons();
 
             if (isLive) {
                 switchToDirectLive();
@@ -2430,6 +2569,7 @@
             }
 
             void syncChatTimeline(liveOffsetSeconds, true);
+            void syncLiveSizeIndicator();
             startChatPolling(() => liveOffsetSeconds);
 
             player.addEventListener('playing', () => {
