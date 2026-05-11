@@ -64,7 +64,6 @@ class SettingsStore:
     def _normalize_saved_channel(
         value: Any,
         default_auto_record: bool,
-        default_chat_record: bool,
     ) -> dict[str, Any] | None:
         if isinstance(value, str):
             name = SettingsStore._normalize_channel(value)
@@ -73,7 +72,6 @@ class SettingsStore:
             return {
                 "name": name,
                 "auto_record": default_auto_record,
-                "chat_record": default_chat_record,
                 "notifications": SettingsStore._default_notifications(),
             }
 
@@ -89,11 +87,9 @@ class SettingsStore:
             return None
 
         auto_record = bool(value.get("auto_record", False))
-        chat_record = bool(value.get("chat_record", default_chat_record))
         return {
             "name": name,
             "auto_record": auto_record,
-            "chat_record": chat_record,
             "notifications": SettingsStore._normalize_notifications(value.get("notifications")),
         }
 
@@ -103,7 +99,6 @@ class SettingsStore:
             {
                 "name": str(item["name"]),
                 "auto_record": bool(item["auto_record"]),
-                "chat_record": bool(item.get("chat_record", True)),
                 "notifications": SettingsStore._normalize_notifications(item.get("notifications")),
             }
             for item in saved_channels
@@ -126,8 +121,6 @@ class SettingsStore:
 
         legacy_auto_record_raw = raw.get("auto_record", False)
         legacy_auto_record = legacy_auto_record_raw if isinstance(legacy_auto_record_raw, bool) else False
-        legacy_chat_record_raw = raw.get("chat_record", True)
-        legacy_chat_record = legacy_chat_record_raw if isinstance(legacy_chat_record_raw, bool) else True
 
         raw_saved_channels = raw.get("saved_channels")
         if raw_saved_channels is None:
@@ -140,7 +133,6 @@ class SettingsStore:
                 normalized_item = self._normalize_saved_channel(
                     value,
                     legacy_auto_record,
-                    legacy_chat_record,
                 )
                 if normalized_item is None:
                     continue
@@ -199,7 +191,6 @@ class SettingsStore:
                 {
                     "name": normalized,
                     "auto_record": False,
-                    "chat_record": True,
                     "notifications": self._default_notifications(),
                 }
             )
@@ -254,22 +245,6 @@ class SettingsStore:
                     item["notifications"] = normalized_notifications
                     self._save_settings()
                     return True, f"Updated notification settings for {normalized}."
-
-            return False, f"{normalized} is not in the channel list."
-
-    def set_channel_chat_record(self, channel: str, enabled: bool) -> tuple[bool, str]:
-        normalized = self._normalize_channel(channel)
-        if not normalized:
-            return False, "Channel name is required."
-
-        with self._lock:
-            saved_channels: list[dict[str, Any]] = self._settings["saved_channels"]
-            for item in saved_channels:
-                if str(item["name"]) == normalized:
-                    item["chat_record"] = bool(enabled)
-                    self._save_settings()
-                    state = "enabled" if enabled else "disabled"
-                    return True, f"Chat capture {state} for {normalized}."
 
             return False, f"{normalized} is not in the channel list."
 

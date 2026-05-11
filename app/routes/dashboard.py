@@ -4,6 +4,7 @@ import mimetypes
 import re
 import shutil
 import subprocess
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -55,6 +56,8 @@ FORCED_VIDEO_MIME_TYPES = {
 _TIMESTAMP_SUFFIX_PATTERN = re.compile(r"^(?P<title>.+?)_(?P<stamp>\d{8}_\d{6})$")
 _LIVE_DVR_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
 _TRANSIENT_CACHE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,96}$")
+_TRANSCODE_LOCKS_GUARD = threading.Lock()
+_TRANSCODE_LOCKS: dict[str, threading.Lock] = {}
 
 try:
     import imageio_ffmpeg  # type: ignore[import-not-found]
@@ -273,6 +276,17 @@ def _transient_transcode_path(root: Path, recording_file: Path, transient_cache_
     return _video_cache_dir() / f"transient-{transient_cache_id}-{recording_digest}.mp4"
 
 
+def _transcode_output_lock(output_path: Path) -> threading.Lock:
+    cache_key = str(output_path.resolve())
+    with _TRANSCODE_LOCKS_GUARD:
+        lock = _TRANSCODE_LOCKS.get(cache_key)
+        if lock is None:
+            lock = threading.Lock()
+            _TRANSCODE_LOCKS[cache_key] = lock
+
+    return lock
+
+
 def _live_buffer_bounds() -> tuple[int, int]:
     minimum = int(current_app.config.get("LIVE_BUFFER_MIN_SECONDS", 5) or 5)
     maximum = int(current_app.config.get("LIVE_BUFFER_MAX_SECONDS", 90) or 90)
@@ -455,26 +469,6 @@ def _iso_to_utc_ms(value: str | None) -> int | None:
     return int(parsed.timestamp() * 1000)
 
 
-def _channel_chat_preferences(settings_store: Any) -> dict[str, bool]:
-    settings = settings_store.get_settings()
-    saved_channels = settings.get("saved_channels", [])
-    if not isinstance(saved_channels, list):
-        return {}
-
-    result: dict[str, bool] = {}
-    for item in saved_channels:
-        if not isinstance(item, dict):
-            continue
-
-        name = str(item.get("name", "")).strip().lower()
-        if not name:
-            continue
-
-        result[name] = bool(item.get("chat_record", True))
-
-    return result
-
-
 def _ffmpeg_command_candidates() -> list[list[str]]:
     configured = str(current_app.config.get("FFMPEG_COMMAND", "")).strip()
     candidates: list[list[str]] = []
@@ -551,63 +545,65 @@ def _materialize_ts_mp4_file(ts_path: Path, output_path: Path | None = None) -> 
         except (OSError, ValueError):
             return None
 
-    if cache_path.exists() and cache_path.stat().st_size > 0:
-        return cache_path
-
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    command_candidates = [
-        [
-            ffmpeg_binary,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-i",
-            str(ts_path),
-            "-c",
-            "copy",
-            "-movflags",
-            "+faststart",
-            "-y",
-            str(cache_path),
-        ],
-        [
-            ffmpeg_binary,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-i",
-            str(ts_path),
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "128k",
-            "-pix_fmt",
-            "yuv420p",
-            "-movflags",
-            "+faststart",
-            "-y",
-            str(cache_path),
-        ],
-    ]
-
-    for command in command_candidates:
-        try:
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=60 * 30,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-
-        if result.returncode == 0 and cache_path.exists() and cache_path.stat().st_size > 0:
+    transcode_lock = _transcode_output_lock(cache_path)
+    with transcode_lock:
+        if cache_path.exists() and cache_path.stat().st_size > 0:
             return cache_path
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        command_candidates = [
+            [
+                ffmpeg_binary,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                str(ts_path),
+                "-c",
+                "copy",
+                "-movflags",
+                "+faststart",
+                "-y",
+                str(cache_path),
+            ],
+            [
+                ffmpeg_binary,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                str(ts_path),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                "-y",
+                str(cache_path),
+            ],
+        ]
+
+        for command in command_candidates:
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=60 * 30,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+
+            if result.returncode == 0 and cache_path.exists() and cache_path.stat().st_size > 0:
+                return cache_path
 
     return None
 
@@ -689,7 +685,6 @@ def _stream_ts_as_mp4(ts_path: Path, start_from_end_seconds: int | None = None) 
 def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> dict[str, object]:
     root = _recordings_root_path()
     active_recordings = recording_manager.get_active_recordings()
-    chat_preferences = _channel_chat_preferences(settings_store)
     active_by_path: dict[Path, dict[str, object]] = {}
 
     for item in active_recordings:
@@ -748,7 +743,7 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
                     seen_relative_paths.add(relative_path)
                     active_info = active_by_path.get(resolved_file)
                     channel_key = channel_name.strip().lower()
-                    chat_enabled = bool(chat_preferences.get(channel_key, True))
+                    chat_enabled = True
                     chat_sidecar_path = _chat_sidecar_path_for_recording(recording_file)
 
                     started_at_value = None if active_info is None else active_info.get("started_at")
@@ -760,6 +755,7 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
                     recording_start_utc_ms = _iso_to_utc_ms(started_at)
                     if recording_start_utc_ms is None:
                         recording_start_utc_ms = recorded_at_utc_ms if recorded_at_utc_ms > 0 else None
+                    recording_end_utc_ms = int(file_stat.st_mtime * 1000)
 
                     record = {
                         "channel": channel_name,
@@ -776,6 +772,7 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
                         "quality": None if active_info is None else active_info.get("quality"),
                         "started_at": started_at,
                         "recording_start_utc_ms": recording_start_utc_ms,
+                        "recording_end_utc_ms": recording_end_utc_ms,
                         "pid": None if active_info is None else active_info.get("pid"),
                         "chat_enabled": chat_enabled,
                         "chat_available": _chat_sidecar_has_messages(chat_sidecar_path),
@@ -819,12 +816,21 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
             if isinstance(started_at, str) and started_at.strip()
             else None
         )
+        size_bytes = 0
+        recording_end_utc_ms = recorded_at_utc_ms
+        try:
+            active_stat = active_path.stat()
+            size_bytes = int(active_stat.st_size)
+            recording_end_utc_ms = int(active_stat.st_mtime * 1000)
+        except OSError:
+            pass
+
         recording_start_utc_ms = _iso_to_utc_ms(started_at_iso)
         if recording_start_utc_ms is None:
             recording_start_utc_ms = recorded_at_utc_ms
 
         channel_key = active_channel.strip().lower()
-        chat_enabled = bool(chat_preferences.get(channel_key, True))
+        chat_enabled = True
         chat_sidecar_path = _chat_sidecar_path_for_recording(active_path)
 
         recordings.append(
@@ -837,12 +843,13 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
                 "view_slug": _recording_view_slug(relative_path),
                 "recorded_at": recorded_dt.isoformat(),
                 "recorded_at_unix": recorded_at_unix,
-                "size_bytes": 0,
-                "size_label": _format_size_label(0),
+                "size_bytes": size_bytes,
+                "size_label": _format_size_label(size_bytes),
                 "is_live": True,
                 "quality": active_info.get("quality"),
                 "started_at": started_at_iso,
                 "recording_start_utc_ms": recording_start_utc_ms,
+                "recording_end_utc_ms": recording_end_utc_ms,
                 "pid": active_info.get("pid"),
                 "chat_enabled": chat_enabled,
                 "chat_available": _chat_sidecar_has_messages(chat_sidecar_path),
@@ -1001,7 +1008,6 @@ def _build_dashboard_signature(
         {
             "name": str(item["name"]),
             "auto_record": bool(item["auto_record"]),
-            "chat_record": bool(item.get("chat_record", True)),
             "is_live": bool(item["is_live"]),
             "live_state": str(item["live_state"]),
             "is_recording": bool(item["is_recording"]),
@@ -1271,17 +1277,7 @@ def recording_media(recording_path: str) -> object:
                 start_from_end_seconds=live_buffer_seconds,
             )
 
-        if transient_cache_id:
-            try:
-                transient_path = _transient_transcode_path(root, resolved_path, transient_cache_id)
-            except (OSError, ValueError):
-                transient_path = None
-            converted_mp4 = _materialize_ts_mp4_file(
-                resolved_path,
-                output_path=transient_path,
-            ) if transient_path is not None else None
-        else:
-            converted_mp4 = _materialize_ts_mp4_file(resolved_path)
+        converted_mp4 = _materialize_ts_mp4_file(resolved_path)
 
         if converted_mp4 is not None:
             response = send_file(
@@ -1289,10 +1285,10 @@ def recording_media(recording_path: str) -> object:
                 mimetype="video/mp4",
                 conditional=True,
                 as_attachment=False,
-                max_age=0,
+                max_age=600,
             )
             response.headers["Accept-Ranges"] = "bytes"
-            response.headers["Cache-Control"] = "no-store"
+            response.headers["Cache-Control"] = "public, max-age=600"
             response.headers["X-Playback-Transcoded-File"] = "true"
             return response
 
@@ -1306,10 +1302,14 @@ def recording_media(recording_path: str) -> object:
         mimetype=mime_type,
         conditional=True,
         as_attachment=False,
-        max_age=0,
+        max_age=600,
     )
     response.headers["Accept-Ranges"] = "bytes"
-    response.headers["Cache-Control"] = "no-store"
+    services = get_services(current_app)
+    if _is_live_recording_path(services["recording_manager"], resolved_path):
+        response.headers["Cache-Control"] = "no-store"
+    else:
+        response.headers["Cache-Control"] = "public, max-age=600"
     return response
 
 
@@ -1387,46 +1387,6 @@ def set_channel_auto_recording() -> object:
 
     ok, message = services["settings_store"].set_channel_auto_record(channel, enabled)
     services["auto_recorder"].request_refresh()
-    flash(message, "success" if ok else "error")
-    return _redirect_back()
-
-
-@dashboard_bp.post("/channels/chat")
-def set_channel_chat_recording() -> object:
-    services = get_services(current_app)
-    channel = request.form.get("channel", "")
-    enabled = request.form.get("enabled", "false").strip().lower() in TRUTHY_VALUES
-    normalized_channel = channel.strip().lower().lstrip("@")
-
-    ok, message = services["settings_store"].set_channel_chat_record(channel, enabled)
-    if ok and normalized_channel:
-        chat_capture_service = services.get("chat_capture_service")
-        recording_manager = services.get("recording_manager")
-        if chat_capture_service is not None and recording_manager is not None:
-            if not enabled:
-                chat_capture_service.handle_recording_event(
-                    {
-                        "event": "recording_stopped",
-                        "channel": normalized_channel,
-                    }
-                )
-            else:
-                active_recordings = recording_manager.get_active_recordings()
-                for item in active_recordings:
-                    active_channel = str(item.get("channel", "")).strip().lower()
-                    if active_channel != normalized_channel:
-                        continue
-
-                    chat_capture_service.handle_recording_event(
-                        {
-                            "event": "recording_started",
-                            "channel": active_channel,
-                            "output_file": str(item.get("output_file", "")),
-                            "started_at": str(item.get("started_at", "")),
-                        }
-                    )
-                    break
-
     flash(message, "success" if ok else "error")
     return _redirect_back()
 

@@ -315,19 +315,6 @@ class TwitchChatCaptureService:
         return channel.strip().lower().lstrip("@")
 
     def _chat_enabled_for_channel(self, channel: str) -> bool:
-        settings = self._settings_store.get_settings()
-        saved_channels = settings.get("saved_channels", [])
-        if not isinstance(saved_channels, list):
-            return True
-
-        normalized = self._normalize_channel(channel)
-        for item in saved_channels:
-            if not isinstance(item, dict):
-                continue
-
-            if self._normalize_channel(str(item.get("name", ""))) == normalized:
-                return bool(item.get("chat_record", True))
-
         return True
 
     def _new_worker(self, channel: str, output_file: str) -> _ChannelChatWorker:

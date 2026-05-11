@@ -11,7 +11,9 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16x16.png') }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/shared.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/theme.css') }}">
 </head>
 <body>
     <main class="container">
@@ -22,13 +24,28 @@
                     <span>VStreamware</span>
                 </a>
             </h1>
-            <p>That page could not be found.</p>
+            <div class="header-actions">
+                <a class="header-icon-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
+                    <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 10.5 12 3l9 7.5"></path>
+                        <path d="M5 9.5V21h14V9.5"></path>
+                    </svg>
+                    <span class="sr-only">Home</span>
+                </a>
+                <a class="header-icon-link" href="{{ url_for('dashboard.settings') }}" aria-label="Open settings">
+                    <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09a1.7 1.7 0 0 0 1.56-1.04 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.7 1.7 0 0 0 1.87.34H9A1.7 1.7 0 0 0 10 3.09V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c0 .7.42 1.33 1.07 1.6.16.07.33.1.5.1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.7 1.7 0 0 0 19.4 15z"></path>
+                    </svg>
+                    <span class="sr-only">Settings</span>
+                </a>
+            </div>
         </header>
 
-        <section class="card" style="max-width: 720px; margin: 1.5rem auto; text-align: center;">
-            <h2 style="margin-top: 0;">404</h2>
+        <section class="card not-found-card">
+            <h2 class="not-found-title">404</h2>
             <p class="muted">The link may be outdated, moved, or typed incorrectly.</p>
-            <p style="margin-top: 1rem;">
+            <p class="not-found-actions">
                 <a class="button-link" href="{{ url_for('dashboard.index') }}">Go To Home</a>
                 <a class="button-link" href="{{ url_for('dashboard.settings') }}">Open Settings</a>
             </p>

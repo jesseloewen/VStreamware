@@ -13,7 +13,10 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16x16.png') }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/shared.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/video.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/theme.css') }}">
 </head>
 <body class="browser-page browser-page-video">
     <main class="container">
@@ -25,25 +28,36 @@
                 </a>
             </h1>
             <div class="header-actions">
-                <a class="button-link" href="{{ url_for('dashboard.index') }}">Back To Browser</a>
+                <a class="header-icon-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
+                    <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 10.5 12 3l9 7.5"></path>
+                        <path d="M5 9.5V21h14V9.5"></path>
+                    </svg>
+                    <span class="sr-only">Home</span>
+                </a>
             </div>
-            <p>Single-video viewer.</p>
+            <div class="header-panel-row" aria-label="Panel controls">
+                <div class="header-panel-left">
+                    {% include 'partials/saved_panel_toggle_button.html' %}
+                </div>
+                <div class="header-panel-right">
+                <button
+                    type="button"
+                    class="panel-toggle panel-hamburger video-chat-toolbar-toggle"
+                    data-chat-panel-toggle
+                    aria-controls="video-chat-panel"
+                    aria-expanded="true"
+                    aria-label="Hide chat panel"
+                >
+                    <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect width="18" height="18" x="3" y="3" rx="2"/>
+                        <path d="M15 3v18"/>
+                    </svg>
+                    <span class="panel-toggle-text" data-panel-label>Hide Chat</span>
+                </button>
+                </div>
+            </div>
         </header>
-
-        <div class="mobile-panel-controls video-mobile-panel-controls" aria-label="Panel controls">
-            {% include 'partials/saved_panel_toggle_button.html' %}
-            <button
-                type="button"
-                class="panel-toggle panel-hamburger video-chat-toolbar-toggle"
-                data-chat-panel-toggle
-                aria-controls="video-chat-panel"
-                aria-expanded="true"
-                aria-label="Hide chat panel"
-            >
-                <span class="hamburger-icon" aria-hidden="true"><span></span><span></span><span></span></span>
-                <span class="panel-toggle-text" data-panel-label>Hide Chat</span>
-            </button>
-        </div>
 
         <div class="browser-layout">
             {% include 'partials/saved_channels_panel.html' %}
@@ -75,7 +89,7 @@
                             <div class="video-detail-player-column">
                                 <div class="video-detail-player-wrap" id="video-player-shell">
                                     <div class="video-player-stage" id="video-player-stage">
-                                        <video id="detail-video" preload="auto" data-media-url="{{ recording.media_url }}"{% if recording.is_live %} playsinline{% endif %}></video>
+                                        <video id="detail-video" preload="{{ 'auto' if recording.is_live else 'metadata' }}" data-media-url="{{ recording.media_url }}"{% if recording.is_live %} playsinline{% endif %}></video>
                                         <div class="video-center-toggle-anchor" id="center-toggle-anchor" aria-hidden="true"></div>
                                         <div class="video-gesture-layer" id="video-gesture-layer" aria-live="polite" aria-atomic="true">
                                             <span class="video-gesture-hint is-back" id="video-gesture-back" hidden>-10s</span>
@@ -98,25 +112,6 @@
                                                         <svg class="video-icon-svg" data-icon-name="pause" viewBox="0 0 24 24" aria-hidden="true" hidden fill="currentColor" stroke="none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                                                         <span class="sr-only">Pause</span>
                                                     </button>
-                                                    <div class="video-volume-wrap">
-                                                        <button type="button" id="player-mute-toggle" class="video-control-button video-icon-button" aria-label="Mute audio" aria-haspopup="true" aria-expanded="false" aria-controls="player-volume-panel">
-                                                            <svg class="video-icon-svg" data-icon-name="volume" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
-                                                            <svg class="video-icon-svg" data-icon-name="mute" viewBox="0 0 24 24" aria-hidden="true" hidden fill="currentColor" stroke="none"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
-                                                            <span class="sr-only">Mute</span>
-                                                        </button>
-                                                        <div id="player-volume-panel" class="playback-speed-control playback-speed-popover volume-popover" role="group" aria-label="Volume control" hidden>
-                                                            <input
-                                                                id="player-volume-slider"
-                                                                class="video-volume-slider video-volume-slider-popover"
-                                                                type="range"
-                                                                min="0"
-                                                                max="1"
-                                                                step="0.05"
-                                                                value="1"
-                                                                aria-label="Video volume"
-                                                            >
-                                                        </div>
-                                                    </div>
                                                 </div>
                                                 <div class="video-progress-row">
                                                     <div class="video-progress-start">
@@ -192,6 +187,30 @@
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    <div class="video-volume-wrap">
+                                                        <button type="button" id="player-volume-toggle" class="video-control-button video-icon-button" aria-label="Open volume controls" aria-haspopup="true" aria-expanded="false" aria-controls="player-volume-panel">
+                                                            <svg class="video-icon-svg" data-icon-name="volume" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                                                            <svg class="video-icon-svg" data-icon-name="mute" viewBox="0 0 24 24" aria-hidden="true" hidden fill="currentColor" stroke="none"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+                                                            <span class="sr-only">Volume</span>
+                                                        </button>
+                                                        <div id="player-volume-panel" class="playback-speed-control playback-speed-popover volume-popover" role="group" aria-label="Volume control" hidden>
+                                                            <button type="button" id="player-panel-mute-toggle" class="video-control-button video-icon-button video-volume-mute-toggle" aria-label="Mute audio">
+                                                                <svg class="video-icon-svg" data-icon-name="volume" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                                                                <svg class="video-icon-svg" data-icon-name="mute" viewBox="0 0 24 24" aria-hidden="true" hidden fill="currentColor" stroke="none"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+                                                                <span class="sr-only">Mute</span>
+                                                            </button>
+                                                            <input
+                                                                id="player-volume-slider"
+                                                                class="video-volume-slider video-volume-slider-popover"
+                                                                type="range"
+                                                                min="0"
+                                                                max="1"
+                                                                step="0.05"
+                                                                value="1"
+                                                                aria-label="Video volume"
+                                                            >
+                                                        </div>
+                                                    </div>
                                                     <button type="button" id="player-chat-restore" class="video-control-button video-icon-button video-chat-restore-button" aria-label="Show chat" hidden>
                                                         <svg class="video-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-5 4v-4H4A1.5 1.5 0 0 1 2.5 16V7A1.5 1.5 0 0 1 4 5.5Z"></path><path d="M7.5 10.5h9"></path><path d="M7.5 13.5h6"></path></svg>
                                                         <span class="sr-only">Show chat</span>
@@ -222,7 +241,6 @@
                                     <div class="video-chat-header-actions">
                                         <button type="button" class="video-chat-mode-button" data-chat-mode="side" aria-label="Chat side panel" aria-pressed="true">Side</button>
                                         <button type="button" class="video-chat-mode-button" data-chat-mode="overlay" aria-label="Chat overlay" aria-pressed="false">Overlay</button>
-                                        <button type="button" class="video-chat-mode-button" data-chat-mode="hidden" aria-label="Hide chat" aria-pressed="false">Hide</button>
                                     </div>
                                 </header>
                                 <div class="panel-body video-chat-body">
@@ -243,6 +261,7 @@
                                     </div>
                                 </div>
                             </section>
+                            <button type="button" class="video-chat-overlay-side-button" data-chat-overlay-side-toggle aria-label="Move overlay left" title="Move overlay left" hidden>&lt;</button>
                         </aside>
                     {% endif %}
                 </div>
@@ -272,7 +291,8 @@
             const playerInlineTotalTime = document.getElementById('player-inline-total-time');
             const playerLiveInlineControls = document.getElementById('player-live-inline-controls');
             const playerProgressRow = document.querySelector('.video-progress-row');
-            const playerMuteToggle = document.getElementById('player-mute-toggle');
+            const playerVolumeToggle = document.getElementById('player-volume-toggle');
+            const playerPanelMuteToggle = document.getElementById('player-panel-mute-toggle');
             const playerVolumePanel = document.getElementById('player-volume-panel');
             const playerVolumeSlider = document.getElementById('player-volume-slider');
             const playbackSpeedToggle = document.getElementById('playback-speed-toggle');
@@ -297,7 +317,9 @@
             const chatPanel = document.querySelector('.video-chat-panel');
             const chatResizeHandle = document.getElementById('video-chat-resize-handle');
             const chatModeButtons = Array.from(document.querySelectorAll('[data-chat-mode]'));
+            const chatOverlaySideToggleButton = document.querySelector('[data-chat-overlay-side-toggle]');
             const chatPanelToggleButtons = Array.from(document.querySelectorAll('[data-chat-panel-toggle]'));
+            const sharedPanelOverlay = document.getElementById('panel-overlay');
             const displayTimezonePreference = {{ display_timezone | tojson }};
             const isLive = {{ 'true' if recording.is_live else 'false' }};
             const chatUrl = {{ recording.chat_url | tojson }};
@@ -311,12 +333,20 @@
             const chatSyncSourceStorageKey = 'vstreamware.chat-sync-source';
             const playbackSpeedStorageKey = 'vstreamware.playback-speed';
             const fullscreenChatModeStorageKey = 'vstreamware.fullscreen-chat-mode';
+            const syncedChatModeStorageKey = 'vstreamware.chat-mode';
             const fullscreenSideChatWidthStorageKey = 'vstreamware.fullscreen-side-chat-width';
+            const overlayChatWidthStorageKey = 'vstreamware.overlay-chat-width';
             const normalChatCollapsedStorageKey = 'vstreamware.normal-chat-collapsed';
+            const overlaySideLeftStorageKey = 'vstreamware.chat-overlay-left';
             const playbackSpeedOptions = [0.75, 1, 1.25, 1.5, 2];
             const fullscreenSideChatDefaultRatio = 0.34;
             const fullscreenSideChatMinWidthDesktopPx = 280;
             const fullscreenSideChatMinWidthMobilePx = 210;
+            const overlayChatMinWidthDesktopPx = 260;
+            const overlayChatMinWidthMobilePx = 210;
+            const normalOverlayChatDefaultRatio = 0.34;
+            const normalOverlayChatDefaultMobileRatio = 0.82;
+            const fullscreenOverlayChatDefaultRatio = 0.36;
             const holdBoostPlaybackSpeed = 2;
             const gestureSeekSeconds = 10;
             const doubleTapMaxDelayMs = 280;
@@ -350,14 +380,34 @@
             let lastVisibleFullscreenChatMode = 'side';
             let activeChatResizePointerId = null;
             let isChatSideResizing = false;
+            let activeOverlayChatResizePointerId = null;
+            let isOverlayChatResizing = false;
+            let overlaySideToggleDragStartX = 0;
+            let overlaySideToggleDidDrag = false;
+            let suppressOverlaySideToggleClick = false;
             let timeMetricShowsRemaining = false;
+            const fullscreenStateClassName = 'is-player-fullscreen';
 
             const isPlayerFullscreen = () => document.fullscreenElement === videoDetailContent;
 
+            const syncPlayerFullscreenClass = () => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                videoDetailContent.classList.toggle(fullscreenStateClassName, isPlayerFullscreen());
+            };
+
             const isMobileViewport = () => window.matchMedia('(max-width: 980px), (pointer: coarse)').matches;
+
+            const isNormalMobileChatOverlayViewport = () => window.matchMedia('(max-width: 1120px) and (orientation: portrait)').matches;
 
             const getFullscreenSideChatMinWidthPx = () => (
                 isMobileViewport() ? fullscreenSideChatMinWidthMobilePx : fullscreenSideChatMinWidthDesktopPx
+            );
+
+            const getOverlayChatMinWidthPx = () => (
+                isMobileViewport() ? overlayChatMinWidthMobilePx : overlayChatMinWidthDesktopPx
             );
 
             const lockLandscapeOnMobile = async () => {
@@ -412,6 +462,34 @@
                 }
             };
 
+            const normalizeSyncedChatMode = (rawValue) => {
+                const mode = String(rawValue || '').trim().toLowerCase();
+                return mode === 'overlay' ? 'overlay' : 'side';
+            };
+
+            const persistSyncedChatMode = (rawValue) => {
+                const mode = normalizeSyncedChatMode(rawValue);
+                try {
+                    window.localStorage.setItem(syncedChatModeStorageKey, mode);
+                } catch (_error) {
+                    // Ignore storage failures.
+                }
+            };
+
+            const readPersistedSyncedChatMode = () => {
+                try {
+                    const stored = window.localStorage.getItem(syncedChatModeStorageKey);
+                    if (stored) {
+                        return normalizeSyncedChatMode(stored);
+                    }
+
+                    const fullscreenMode = readPersistedFullscreenChatMode();
+                    return fullscreenMode === 'overlay' ? 'overlay' : 'side';
+                } catch (_error) {
+                    return 'side';
+                }
+            };
+
             const clampFullscreenSideChatWidth = (rawWidth) => {
                 const viewportWidth = Math.max(window.innerWidth || 0, 800);
                 const minWidth = getFullscreenSideChatMinWidthPx();
@@ -456,9 +534,70 @@
                 }
             };
 
+            const clampOverlayChatWidth = (rawWidth, options = {}) => {
+                const fullscreen = options.fullscreen === true;
+                const viewportWidth = Math.max(window.innerWidth || 0, 320);
+                const minWidth = getOverlayChatMinWidthPx();
+                const maxRatio = fullscreen ? 0.62 : (isNormalMobileChatOverlayViewport() ? 0.94 : 0.58);
+                const maxWidth = Math.max(minWidth + 40, Math.floor(viewportWidth * maxRatio));
+                const defaultRatio = fullscreen
+                    ? fullscreenOverlayChatDefaultRatio
+                    : (isNormalMobileChatOverlayViewport() ? normalOverlayChatDefaultMobileRatio : normalOverlayChatDefaultRatio);
+                const fallback = Math.round(viewportWidth * defaultRatio);
+                const parsed = Number.parseInt(String(rawWidth), 10);
+                const candidate = Number.isFinite(parsed) ? parsed : fallback;
+                return Math.max(minWidth, Math.min(maxWidth, candidate));
+            };
+
+            const setOverlayChatWidth = (rawWidth, persist = true, options = {}) => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                const fullscreen = options.fullscreen === true
+                    || (options.fullscreen !== false && isPlayerFullscreen());
+                const widthPx = clampOverlayChatWidth(rawWidth, { fullscreen });
+                videoDetailContent.style.setProperty('--overlay-chat-width', `${widthPx}px`);
+
+                if (chatOverlaySideToggleButton) {
+                    chatOverlaySideToggleButton.setAttribute('aria-valuenow', String(widthPx));
+                }
+
+                if (persist) {
+                    try {
+                        window.localStorage.setItem(overlayChatWidthStorageKey, String(widthPx));
+                    } catch (_error) {
+                        // Ignore storage failures.
+                    }
+                }
+            };
+
+            const readPersistedOverlayChatWidth = () => {
+                try {
+                    const stored = window.localStorage.getItem(overlayChatWidthStorageKey);
+                    if (!stored) {
+                        return clampOverlayChatWidth(null, { fullscreen: isPlayerFullscreen() });
+                    }
+
+                    return clampOverlayChatWidth(stored, { fullscreen: isPlayerFullscreen() });
+                } catch (_error) {
+                    return clampOverlayChatWidth(null, { fullscreen: isPlayerFullscreen() });
+                }
+            };
+
             const readPersistedNormalChatCollapsed = () => {
                 try {
                     const stored = window.localStorage.getItem(normalChatCollapsedStorageKey);
+                    const normalized = String(stored || '').trim().toLowerCase();
+                    return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+                } catch (_error) {
+                    return false;
+                }
+            };
+
+            const readPersistedOverlaySideLeft = () => {
+                try {
+                    const stored = window.localStorage.getItem(overlaySideLeftStorageKey);
                     const normalized = String(stored || '').trim().toLowerCase();
                     return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
                 } catch (_error) {
@@ -471,12 +610,106 @@
                 && videoDetailContent.classList.contains('chat-panel-collapsed')
             );
 
+            const isNormalMobileSidePanelOpen = () => Boolean(
+                videoDetailContent
+                && videoDetailContent.classList.contains('chat-panel-mobile-open')
+            );
+
+            const isNormalOverlayMode = () => Boolean(
+                videoDetailContent
+                && videoDetailContent.classList.contains('chat-panel-overlay')
+            );
+
+            const isOverlaySideLeft = () => Boolean(
+                videoDetailContent
+                && videoDetailContent.classList.contains('chat-overlay-left')
+            );
+
+            const hasOpenSidePanels = () => document.querySelector('.side-panel.is-open') !== null;
+
+            const syncSharedPanelOverlayState = () => {
+                const shouldShowOverlay = (!isPlayerFullscreen() && isNormalMobileSidePanelOpen()) || hasOpenSidePanels();
+                if (sharedPanelOverlay) {
+                    sharedPanelOverlay.classList.toggle('is-visible', shouldShowOverlay);
+                }
+
+                document.body.classList.toggle('panel-open', shouldShowOverlay);
+            };
+
+            const updateOverlaySideToggleButton = () => {
+                if (!chatOverlaySideToggleButton || !videoDetailContent) {
+                    return;
+                }
+
+                const overlayActive = (isPlayerFullscreen() && videoDetailContent.classList.contains('chat-mode-overlay'))
+                    || (!isPlayerFullscreen() && isNormalOverlayMode() && !isNormalChatPanelCollapsed());
+                const shouldMoveLeft = !isOverlaySideLeft();
+                const label = shouldMoveLeft ? 'Move overlay left' : 'Move overlay right';
+                chatOverlaySideToggleButton.textContent = shouldMoveLeft ? '<' : '>';
+                chatOverlaySideToggleButton.setAttribute('aria-label', label);
+                chatOverlaySideToggleButton.setAttribute('title', label);
+                chatOverlaySideToggleButton.setAttribute('aria-orientation', 'vertical');
+                chatOverlaySideToggleButton.setAttribute('aria-valuemin', String(getOverlayChatMinWidthPx()));
+                chatOverlaySideToggleButton.hidden = !overlayActive;
+                chatOverlaySideToggleButton.tabIndex = overlayActive ? 0 : -1;
+                updateOverlayChatResizeHandleVisibility();
+            };
+
+            const isOverlayResizeActive = () => Boolean(
+                videoDetailContent
+                && ((isPlayerFullscreen() && videoDetailContent.classList.contains('chat-mode-overlay'))
+                    || (!isPlayerFullscreen() && isNormalOverlayMode() && !isNormalChatPanelCollapsed()))
+            );
+
+            const updateOverlayChatResizeHandleVisibility = () => {
+                if (!chatOverlaySideToggleButton || !videoDetailContent) {
+                    return;
+                }
+
+                const isActive = isOverlayResizeActive();
+
+                if (!isActive) {
+                    if (isOverlayChatResizing) {
+                        stopOverlayChatResize();
+                    }
+                    return;
+                }
+
+                const current = getComputedStyle(videoDetailContent).getPropertyValue('--overlay-chat-width').trim();
+                const widthPx = clampOverlayChatWidth(current, { fullscreen: isPlayerFullscreen() });
+                chatOverlaySideToggleButton.setAttribute('aria-valuenow', String(widthPx));
+            };
+
+            const setOverlaySideLeft = (enabled, persist = true) => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                videoDetailContent.classList.toggle('chat-overlay-left', Boolean(enabled));
+                updateOverlaySideToggleButton();
+
+                if (!persist) {
+                    return;
+                }
+
+                try {
+                    window.localStorage.setItem(overlaySideLeftStorageKey, enabled ? '1' : '0');
+                } catch (_error) {
+                    // Ignore storage failures.
+                }
+            };
+
             const updateChatPanelToggleButtons = () => {
                 const fullscreenHidden = Boolean(
                     videoDetailContent
                     && videoDetailContent.classList.contains('chat-mode-hidden')
                 );
-                const collapsed = isPlayerFullscreen() ? fullscreenHidden : isNormalChatPanelCollapsed();
+                const normalOverlayHidden = isNormalOverlayMode() && isNormalChatPanelCollapsed();
+                const collapsed = isPlayerFullscreen()
+                    ? fullscreenHidden
+                    : (isNormalMobileChatOverlayViewport()
+                        ? (isNormalOverlayMode() ? normalOverlayHidden : !isNormalMobileSidePanelOpen())
+                        : isNormalChatPanelCollapsed());
                 const nextLabel = collapsed ? 'Show Chat' : 'Hide Chat';
                 const nextAriaLabel = collapsed ? 'Show chat panel' : 'Hide chat panel';
 
@@ -489,6 +722,74 @@
                         labelElement.textContent = nextLabel;
                     }
                 }
+
+                updateChatModeButtons();
+            };
+
+            const updateChatModeButtons = () => {
+                if (!videoDetailContent || chatModeButtons.length === 0) {
+                    return;
+                }
+
+                const updateModeSwitchVisibility = (activeMode) => {
+                    for (const button of chatModeButtons) {
+                        const mode = String(button.getAttribute('data-chat-mode') || 'side').trim().toLowerCase();
+                        if (mode !== 'side' && mode !== 'overlay') {
+                            continue;
+                        }
+
+                        const shouldShow = mode !== activeMode;
+                        button.hidden = !shouldShow;
+                        button.tabIndex = shouldShow ? 0 : -1;
+                    }
+                };
+
+                if (isPlayerFullscreen()) {
+                    let activeMode = 'side';
+                    if (videoDetailContent.classList.contains('chat-mode-overlay')) {
+                        activeMode = 'overlay';
+                    } else if (videoDetailContent.classList.contains('chat-mode-hidden')) {
+                        activeMode = 'hidden';
+                    }
+
+                    for (const button of chatModeButtons) {
+                        const mode = String(button.getAttribute('data-chat-mode') || 'side').trim().toLowerCase();
+                        button.setAttribute('aria-pressed', mode === activeMode ? 'true' : 'false');
+                    }
+                    updateModeSwitchVisibility(activeMode);
+                    updateOverlaySideToggleButton();
+                    return;
+                }
+
+                const overlayActive = isNormalOverlayMode();
+                const activeMode = overlayActive ? 'overlay' : 'side';
+                for (const button of chatModeButtons) {
+                    const mode = String(button.getAttribute('data-chat-mode') || 'side').trim().toLowerCase();
+                    const isPressed = mode === 'overlay' ? overlayActive : mode === 'side' ? !overlayActive : false;
+                    button.setAttribute('aria-pressed', isPressed ? 'true' : 'false');
+                }
+                updateModeSwitchVisibility(activeMode);
+                updateOverlaySideToggleButton();
+            };
+
+            const setNormalChatOverlayMode = (enabled) => {
+                if (!videoDetailContent || isPlayerFullscreen()) {
+                    return;
+                }
+
+                const shouldEnableOverlay = Boolean(enabled);
+                persistSyncedChatMode(shouldEnableOverlay ? 'overlay' : 'side');
+                videoDetailContent.classList.toggle('chat-panel-overlay', shouldEnableOverlay);
+
+                if (shouldEnableOverlay) {
+                    videoDetailContent.classList.remove('chat-panel-collapsed');
+                    videoDetailContent.classList.remove('chat-panel-mobile-open');
+                }
+
+                setNormalModeChatHeight();
+                updatePlayerChatRestoreButton();
+                updateChatPanelToggleButtons();
+                syncSharedPanelOverlayState();
             };
 
             const setNormalChatPanelCollapsed = (collapsed, persist = true) => {
@@ -497,6 +798,10 @@
                 }
 
                 videoDetailContent.classList.toggle('chat-panel-collapsed', Boolean(collapsed));
+
+                if (collapsed) {
+                    videoDetailContent.classList.remove('chat-panel-mobile-open');
+                }
 
                 if (persist) {
                     try {
@@ -509,6 +814,69 @@
                 setNormalModeChatHeight();
                 updatePlayerChatRestoreButton();
                 updateChatPanelToggleButtons();
+                syncSharedPanelOverlayState();
+            };
+
+            const setNormalMobileSidePanelOpen = (open) => {
+                if (!videoDetailContent || isPlayerFullscreen()) {
+                    return;
+                }
+
+                if (!isNormalMobileChatOverlayViewport()) {
+                    return;
+                }
+
+                const shouldOpen = Boolean(open);
+                persistSyncedChatMode('side');
+                videoDetailContent.classList.remove('chat-panel-overlay');
+                videoDetailContent.classList.add('chat-panel-collapsed');
+                videoDetailContent.classList.toggle('chat-panel-mobile-open', shouldOpen);
+                if (shouldOpen) {
+                    for (const panel of document.querySelectorAll('.side-panel.is-open')) {
+                        panel.classList.remove('is-open');
+                    }
+                } else {
+                    videoDetailContent.classList.remove('chat-panel-mobile-open');
+                }
+
+                setNormalModeChatHeight();
+                updatePlayerChatRestoreButton();
+                updateChatPanelToggleButtons();
+                syncSharedPanelOverlayState();
+            };
+
+            const enforceNormalMobileChatLayout = () => {
+                if (!videoDetailContent || isPlayerFullscreen()) {
+                    return;
+                }
+
+                const preferredMode = readPersistedSyncedChatMode();
+
+                if (isNormalMobileChatOverlayViewport()) {
+                    if (preferredMode === 'overlay') {
+                        videoDetailContent.classList.add('chat-panel-overlay');
+                        videoDetailContent.classList.toggle('chat-panel-collapsed', readPersistedNormalChatCollapsed());
+                        videoDetailContent.classList.remove('chat-panel-mobile-open');
+                    } else {
+                        videoDetailContent.classList.remove('chat-panel-overlay');
+                        videoDetailContent.classList.add('chat-panel-collapsed');
+                        videoDetailContent.classList.remove('chat-panel-mobile-open');
+                    }
+                } else {
+                    videoDetailContent.classList.remove('chat-panel-mobile-open');
+                    if (preferredMode === 'overlay') {
+                        videoDetailContent.classList.add('chat-panel-overlay');
+                        videoDetailContent.classList.remove('chat-panel-collapsed');
+                    } else {
+                        videoDetailContent.classList.remove('chat-panel-overlay');
+                        videoDetailContent.classList.toggle('chat-panel-collapsed', readPersistedNormalChatCollapsed());
+                    }
+                }
+
+                setNormalModeChatHeight();
+                updatePlayerChatRestoreButton();
+                updateChatPanelToggleButtons();
+                syncSharedPanelOverlayState();
             };
 
             const toggleChatPanelVisibility = () => {
@@ -527,6 +895,15 @@
 
                     showFullscreenControls();
                     updateChatPanelToggleButtons();
+                    return;
+                }
+
+                if (isNormalMobileChatOverlayViewport()) {
+                    if (isNormalOverlayMode()) {
+                        setNormalChatPanelCollapsed(!isNormalChatPanelCollapsed());
+                    } else {
+                        setNormalMobileSidePanelOpen(!isNormalMobileSidePanelOpen());
+                    }
                     return;
                 }
 
@@ -566,6 +943,25 @@
                 setFullscreenSideChatWidth(current || readPersistedFullscreenSideChatWidth(), true);
             };
 
+            const stopOverlayChatResize = () => {
+                if (!isOverlayChatResizing) {
+                    return;
+                }
+
+                isOverlayChatResizing = false;
+                activeOverlayChatResizePointerId = null;
+                overlaySideToggleDragStartX = 0;
+                overlaySideToggleDidDrag = false;
+                document.body.classList.remove('is-chat-overlay-resizing');
+
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                const current = getComputedStyle(videoDetailContent).getPropertyValue('--overlay-chat-width').trim();
+                setOverlayChatWidth(current || readPersistedOverlayChatWidth(), true);
+            };
+
             const resizeSideChatFromClientX = (clientX) => {
                 if (!videoDetailContent) {
                     return;
@@ -580,12 +976,31 @@
                 setFullscreenSideChatWidth(width, false);
             };
 
+            const resizeOverlayChatFromClientX = (clientX) => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                const bounds = videoDetailContent.getBoundingClientRect();
+                if (bounds.width <= 0) {
+                    return;
+                }
+
+                const width = isOverlaySideLeft()
+                    ? Math.round(clientX - bounds.left)
+                    : Math.round(bounds.right - clientX);
+                setOverlayChatWidth(width, false, { fullscreen: isPlayerFullscreen() });
+            };
+
             const setFullscreenChatMode = (rawMode, persist = true) => {
                 if (!videoDetailContent) {
                     return;
                 }
 
                 const mode = normalizeFullscreenChatMode(rawMode);
+                if (mode === 'side' || mode === 'overlay') {
+                    persistSyncedChatMode(mode);
+                }
                 videoDetailContent.classList.remove('chat-mode-side', 'chat-mode-overlay', 'chat-mode-hidden');
                 videoDetailContent.classList.add(`chat-mode-${mode}`);
                 if (mode !== 'hidden') {
@@ -596,8 +1011,16 @@
                     stopSideChatResize();
                 }
 
+                if (mode !== 'overlay') {
+                    stopOverlayChatResize();
+                }
+
                 if (mode === 'side' && isPlayerFullscreen()) {
                     setFullscreenSideChatWidth(readPersistedFullscreenSideChatWidth(), false);
+                }
+
+                if (mode === 'overlay' && isPlayerFullscreen()) {
+                    setOverlayChatWidth(readPersistedOverlayChatWidth(), false, { fullscreen: true });
                 }
 
                 for (const button of chatModeButtons) {
@@ -630,15 +1053,33 @@
 
                 if (videoDetailContent.classList.contains('chat-panel-collapsed')) {
                     videoDetailContent.style.removeProperty('--video-chat-height');
+                    videoDetailContent.style.removeProperty('--video-chat-left');
+                    videoDetailContent.style.removeProperty('--video-chat-right');
+                    videoDetailContent.style.removeProperty('--video-chat-overlay-bottom-clearance');
                     return;
                 }
 
                 const wrapRect = videoPlayerWrap.getBoundingClientRect();
+                const contentRect = videoDetailContent.getBoundingClientRect();
                 if (wrapRect.height <= 0) {
                     return;
                 }
 
+                const topOffset = Math.max(0, Math.round(wrapRect.top - contentRect.top));
+                const leftOffset = Math.max(0, Math.round(wrapRect.left - contentRect.left));
+                const rightOffset = Math.max(0, Math.round(contentRect.right - wrapRect.right));
+                const controlsRect = playerControls ? playerControls.getBoundingClientRect() : null;
+                const controlsHeight = controlsRect && Number.isFinite(controlsRect.height)
+                    ? Math.round(controlsRect.height)
+                    : 0;
+                const overlayBottomClearance = controlsHeight > 0
+                    ? Math.min(Math.max(controlsHeight + 10, 20), 260)
+                    : 20;
+                videoDetailContent.style.setProperty('--video-chat-top', `${topOffset}px`);
                 videoDetailContent.style.setProperty('--video-chat-height', `${Math.round(wrapRect.height)}px`);
+                videoDetailContent.style.setProperty('--video-chat-left', `${leftOffset}px`);
+                videoDetailContent.style.setProperty('--video-chat-right', `${rightOffset}px`);
+                videoDetailContent.style.setProperty('--video-chat-overlay-bottom-clearance', `${overlayBottomClearance}px`);
             };
 
             const updateFullscreenOverlayChatMetrics = () => {
@@ -1143,13 +1584,13 @@
             };
 
             const setVolumeMenuOpen = (isOpen) => {
-                if (!playerMuteToggle || !playerVolumePanel) {
+                if (!playerVolumeToggle || !playerVolumePanel) {
                     return;
                 }
 
                 isVolumeMenuOpen = Boolean(isOpen);
                 playerVolumePanel.hidden = !isVolumeMenuOpen;
-                playerMuteToggle.setAttribute('aria-expanded', isVolumeMenuOpen ? 'true' : 'false');
+                playerVolumeToggle.setAttribute('aria-expanded', isVolumeMenuOpen ? 'true' : 'false');
                 if (videoPlayerWrap) {
                     videoPlayerWrap.classList.toggle('is-volume-menu-open', isVolumeMenuOpen);
                 }
@@ -1618,15 +2059,16 @@
                 });
             }
 
-            if (playerMuteToggle) {
-                playerMuteToggle.addEventListener('click', () => {
-                    if (isVolumeMenuOpen) {
-                        togglePlayerMute();
-                        return;
-                    }
-
+            if (playerVolumeToggle) {
+                playerVolumeToggle.addEventListener('click', () => {
                     setSpeedMenuOpen(false);
-                    setVolumeMenuOpen(true);
+                    setVolumeMenuOpen(!isVolumeMenuOpen);
+                });
+            }
+
+            if (playerPanelMuteToggle) {
+                playerPanelMuteToggle.addEventListener('click', () => {
+                    togglePlayerMute();
                 });
             }
 
@@ -1693,15 +2135,74 @@
                 });
             }
 
-            if (playerChatRestoreButton) {
-                playerChatRestoreButton.addEventListener('click', () => {
-                    if (!isPlayerFullscreen()) {
-                        setNormalChatPanelCollapsed(false);
+            if (chatOverlaySideToggleButton) {
+                chatOverlaySideToggleButton.addEventListener('pointerdown', (event) => {
+                    if (!isOverlayResizeActive()) {
                         return;
                     }
 
-                    const restoreMode = lastVisibleFullscreenChatMode === 'overlay' ? 'overlay' : 'side';
-                    setFullscreenChatMode(restoreMode);
+                    isOverlayChatResizing = true;
+                    activeOverlayChatResizePointerId = event.pointerId;
+                    overlaySideToggleDragStartX = event.clientX;
+                    overlaySideToggleDidDrag = false;
+                    document.body.classList.add('is-chat-overlay-resizing');
+                    chatOverlaySideToggleButton.setPointerCapture(event.pointerId);
+                    event.preventDefault();
+                });
+
+                chatOverlaySideToggleButton.addEventListener('pointermove', (event) => {
+                    if (!isOverlayChatResizing || activeOverlayChatResizePointerId !== event.pointerId) {
+                        return;
+                    }
+
+                    if (!overlaySideToggleDidDrag) {
+                        const movedPx = Math.abs(event.clientX - overlaySideToggleDragStartX);
+                        if (movedPx < 2) {
+                            return;
+                        }
+                        overlaySideToggleDidDrag = true;
+                    }
+
+                    resizeOverlayChatFromClientX(event.clientX);
+                });
+
+                chatOverlaySideToggleButton.addEventListener('pointerup', (event) => {
+                    if (activeOverlayChatResizePointerId !== event.pointerId) {
+                        return;
+                    }
+
+                    if (overlaySideToggleDidDrag) {
+                        suppressOverlaySideToggleClick = true;
+                    }
+                    stopOverlayChatResize();
+                });
+
+                chatOverlaySideToggleButton.addEventListener('pointercancel', () => {
+                    stopOverlayChatResize();
+                });
+
+                chatOverlaySideToggleButton.addEventListener('keydown', (event) => {
+                    if (!isOverlayResizeActive()) {
+                        return;
+                    }
+
+                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+                        return;
+                    }
+
+                    const current = getComputedStyle(videoDetailContent).getPropertyValue('--overlay-chat-width').trim();
+                    const currentPx = clampOverlayChatWidth(current, { fullscreen: isPlayerFullscreen() });
+                    const delta = isOverlaySideLeft()
+                        ? (event.key === 'ArrowLeft' ? -24 : 24)
+                        : (event.key === 'ArrowLeft' ? 24 : -24);
+                    setOverlayChatWidth(currentPx + delta, true, { fullscreen: isPlayerFullscreen() });
+                    event.preventDefault();
+                });
+            }
+
+            if (playerChatRestoreButton) {
+                playerChatRestoreButton.addEventListener('click', () => {
+                    toggleChatPanelVisibility();
                     showFullscreenControls();
                 });
             }
@@ -1731,8 +2232,8 @@
                     }
                 }
 
-                if (isVolumeMenuOpen && playerMuteToggle && playerVolumePanel) {
-                    if (!playerMuteToggle.contains(target) && !playerVolumePanel.contains(target)) {
+                if (isVolumeMenuOpen && playerVolumeToggle && playerVolumePanel) {
+                    if (!playerVolumeToggle.contains(target) && !playerVolumePanel.contains(target)) {
                         setVolumeMenuOpen(false);
                     }
                 }
@@ -1750,7 +2251,25 @@
                 if (isVolumeMenuOpen) {
                     setVolumeMenuOpen(false);
                 }
+
+                if (!isPlayerFullscreen() && isNormalMobileChatOverlayViewport()) {
+                    if (isNormalOverlayMode() && !isNormalChatPanelCollapsed()) {
+                        setNormalChatPanelCollapsed(true);
+                    } else if (isNormalMobileSidePanelOpen()) {
+                        setNormalMobileSidePanelOpen(false);
+                    }
+                }
             });
+
+            if (sharedPanelOverlay) {
+                sharedPanelOverlay.addEventListener('click', () => {
+                    if (!isPlayerFullscreen() && isNormalMobileSidePanelOpen()) {
+                        setNormalMobileSidePanelOpen(false);
+                    } else {
+                        syncSharedPanelOverlayState();
+                    }
+                });
+            }
 
             if (playerUi) {
                 playerUi.addEventListener('pointerdown', () => {
@@ -1767,18 +2286,33 @@
             }
 
             document.addEventListener('fullscreenchange', () => {
+                syncPlayerFullscreenClass();
                 updatePlayerFullscreenButton();
                 updatePlayerChatRestoreButton();
                 showFullscreenControls();
                 if (isPlayerFullscreen()) {
-                    setFullscreenChatMode(readPersistedFullscreenChatMode(), false);
+                    videoDetailContent.classList.remove('chat-panel-mobile-open');
+                    const persistedFullscreenMode = readPersistedFullscreenChatMode();
+                    const syncedMode = readPersistedSyncedChatMode();
+                    const targetMode = persistedFullscreenMode === 'hidden' ? 'hidden' : syncedMode;
+                    if (persistedFullscreenMode === 'hidden') {
+                        lastVisibleFullscreenChatMode = syncedMode;
+                    }
+                    setFullscreenChatMode(targetMode, false);
                     if (videoDetailContent.classList.contains('chat-mode-side')) {
                         setFullscreenSideChatWidth(readPersistedFullscreenSideChatWidth(), false);
                     }
+                    if (videoDetailContent.classList.contains('chat-mode-overlay')) {
+                        setOverlayChatWidth(readPersistedOverlayChatWidth(), false, { fullscreen: true });
+                    }
                     void syncChatTimeline(liveOffsetSeconds, true);
+                    syncSharedPanelOverlayState();
                 } else {
                     unlockOrientationIfSupported();
                     stopSideChatResize();
+                    stopOverlayChatResize();
+                    enforceNormalMobileChatLayout();
+                    setOverlayChatWidth(readPersistedOverlayChatWidth(), false, { fullscreen: false });
                 }
 
                 updateChatResizeHandleVisibility();
@@ -1788,11 +2322,14 @@
 
             window.addEventListener('resize', () => {
                 setNormalModeChatHeight();
+                enforceNormalMobileChatLayout();
                 updatePlayerTimelineUi();
                 if (isFullscreenSideChatMode()) {
                     const current = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-side-chat-width').trim();
                     setFullscreenSideChatWidth(current || readPersistedFullscreenSideChatWidth(), false);
                 }
+                const currentOverlayWidth = getComputedStyle(videoDetailContent).getPropertyValue('--overlay-chat-width').trim();
+                setOverlayChatWidth(currentOverlayWidth || readPersistedOverlayChatWidth(), false);
                 updateFullscreenOverlayChatMetrics();
                 updateChatPanelToggleButtons();
             });
@@ -1813,6 +2350,17 @@
                 });
             }
 
+            if (chatOverlaySideToggleButton) {
+                chatOverlaySideToggleButton.addEventListener('click', () => {
+                    if (suppressOverlaySideToggleClick) {
+                        suppressOverlaySideToggleClick = false;
+                        return;
+                    }
+
+                    setOverlaySideLeft(!isOverlaySideLeft());
+                });
+            }
+
             if (chatSyncSourceToggle) {
                 chatSyncSourceToggle.addEventListener('change', () => {
                     const nextSource = chatSyncSourceToggle.checked ? 'live' : 'playback';
@@ -1824,8 +2372,26 @@
 
             for (const button of chatModeButtons) {
                 button.addEventListener('click', () => {
-                    const mode = button.getAttribute('data-chat-mode') || 'side';
-                    setFullscreenChatMode(mode);
+                    const mode = String(button.getAttribute('data-chat-mode') || 'side').trim().toLowerCase();
+                    if (isPlayerFullscreen()) {
+                        setFullscreenChatMode(mode);
+                        return;
+                    }
+
+                    if (mode === 'overlay') {
+                        setNormalChatOverlayMode(true);
+                        setNormalChatPanelCollapsed(false);
+                        return;
+                    }
+
+                    if (isNormalMobileChatOverlayViewport()) {
+                        setNormalChatOverlayMode(false);
+                        setNormalMobileSidePanelOpen(true);
+                        return;
+                    }
+
+                    setNormalChatOverlayMode(false);
+                    setNormalChatPanelCollapsed(false);
                 });
             }
 
@@ -1932,21 +2498,11 @@
                     return { url: '', transientCacheId: '' };
                 }
 
-                const transientCacheId = createTransientCacheId();
-                try {
-                    const url = new URL(mediaBaseUrl, window.location.href);
-                    url.searchParams.set('transient_id', transientCacheId);
-                    return {
-                        url: url.toString(),
-                        transientCacheId,
-                    };
-                } catch (_error) {
-                    const separator = mediaBaseUrl.includes('?') ? '&' : '?';
-                    return {
-                        url: `${mediaBaseUrl}${separator}transient_id=${encodeURIComponent(transientCacheId)}`,
-                        transientCacheId,
-                    };
-                }
+                // Recorded playback should reuse shared backend transcodes across LAN clients.
+                return {
+                    url: mediaBaseUrl,
+                    transientCacheId: '',
+                };
             };
 
             const buildLiveMediaUrl = (options = {}) => {
@@ -2090,11 +2646,20 @@
                     return;
                 }
 
-                const shouldShow = (
+                const isChatHidden = (
                     (isPlayerFullscreen() && videoDetailContent.classList.contains('chat-mode-hidden'))
-                    || (!isPlayerFullscreen() && videoDetailContent.classList.contains('chat-panel-collapsed'))
+                    || (!isPlayerFullscreen() && (isNormalMobileChatOverlayViewport()
+                        ? (isNormalOverlayMode() ? isNormalChatPanelCollapsed() : !isNormalMobileSidePanelOpen())
+                        : videoDetailContent.classList.contains('chat-panel-collapsed')))
                 );
-                playerChatRestoreButton.hidden = !shouldShow;
+
+                playerChatRestoreButton.hidden = false;
+                const label = isChatHidden ? 'Show chat' : 'Hide chat';
+                playerChatRestoreButton.setAttribute('aria-label', label);
+                const srOnly = playerChatRestoreButton.querySelector('.sr-only');
+                if (srOnly) {
+                    srOnly.textContent = label;
+                }
             };
 
             const updatePlayerPlayButtons = () => {
@@ -2121,11 +2686,18 @@
                     playerVolumeSlider.value = String(player.muted ? 0 : Math.max(0, Math.min(1, player.volume)));
                 }
 
-                if (playerMuteToggle) {
-                    const muted = player.muted || player.volume <= 0;
+                const muted = player.muted || player.volume <= 0;
+
+                if (playerVolumeToggle) {
+                    const nextLabel = 'Open volume controls';
+                    playerVolumeToggle.setAttribute('aria-label', nextLabel);
+                    setControlButtonIcon(playerVolumeToggle, muted ? 'mute' : 'volume', nextLabel);
+                }
+
+                if (playerPanelMuteToggle) {
                     const nextLabel = muted ? 'Unmute audio' : 'Mute audio';
-                    playerMuteToggle.setAttribute('aria-label', nextLabel);
-                    setControlButtonIcon(playerMuteToggle, muted ? 'mute' : 'volume', nextLabel);
+                    playerPanelMuteToggle.setAttribute('aria-label', nextLabel);
+                    setControlButtonIcon(playerPanelMuteToggle, muted ? 'mute' : 'volume', nextLabel);
                 }
             };
 
@@ -2202,6 +2774,7 @@
             };
 
             const updateCustomPlayerUi = () => {
+                syncPlayerFullscreenClass();
                 updatePlayerPlayButtons();
                 updatePlayerVolumeUi();
                 updatePlayerTimelineUi();
@@ -2555,7 +3128,16 @@
             holdBoostRestoreSpeed = preferredPlaybackSpeed;
             applyPlaybackSpeed(preferredPlaybackSpeed);
             setNormalChatPanelCollapsed(readPersistedNormalChatCollapsed(), false);
-            setFullscreenChatMode(readPersistedFullscreenChatMode(), false);
+            enforceNormalMobileChatLayout();
+            setOverlayChatWidth(readPersistedOverlayChatWidth(), false);
+            setOverlaySideLeft(readPersistedOverlaySideLeft(), false);
+            const initialFullscreenMode = readPersistedFullscreenChatMode();
+            const initialSyncedMode = readPersistedSyncedChatMode();
+            const initialTargetFullscreenMode = initialFullscreenMode === 'hidden' ? 'hidden' : initialSyncedMode;
+            if (initialFullscreenMode === 'hidden') {
+                lastVisibleFullscreenChatMode = initialSyncedMode;
+            }
+            setFullscreenChatMode(initialTargetFullscreenMode, false);
             setFullscreenSideChatWidth(readPersistedFullscreenSideChatWidth(), false);
             updateModeControls();
             updateFullscreenOverlayChatMetrics();

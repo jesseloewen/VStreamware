@@ -1,4 +1,5 @@
 import os
+import shlex
 from pathlib import Path
 
 
@@ -33,6 +34,21 @@ def _env_str(key: str, default: str) -> str:
     return normalized
 
 
+def _env_argv(key: str, default: list[str] | None = None) -> list[str]:
+    value = os.getenv(key)
+    if value is None:
+        return list(default or [])
+
+    normalized = value.strip()
+    if not normalized:
+        return list(default or [])
+
+    try:
+        return shlex.split(normalized, posix=(os.name != "nt"))
+    except ValueError:
+        return list(default or [])
+
+
 class Config:
     BASE_DIR = Path(__file__).resolve().parent.parent
     DATA_DIR = BASE_DIR / "data"
@@ -55,6 +71,9 @@ class Config:
     LIVE_BUFFER_MAX_SECONDS = _env_int("LIVE_BUFFER_MAX_SECONDS", 90)
     LIVE_DIRECT_START_FROM_END_SECONDS = _env_int("LIVE_DIRECT_START_FROM_END_SECONDS", 30)
     STREAM_DEFAULT_QUALITY = os.getenv("STREAM_DEFAULT_QUALITY", "best")
+    STREAM_PROBE_TIMEOUT_SECONDS = max(5, _env_int("STREAM_PROBE_TIMEOUT_SECONDS", 20))
+    STREAMLINK_EXTRA_ARGS = _env_argv("STREAMLINK_EXTRA_ARGS", [])
+    RECORDING_BACKGROUND_PRIORITY = _env_bool("RECORDING_BACKGROUND_PRIORITY", True)
     PUSHOVER_APP_TOKEN = os.getenv("PUSHOVER_APP_TOKEN", "")
     PUSHOVER_USER_KEY = os.getenv("PUSHOVER_USER_KEY", "")
     PUSHOVER_API_URL = os.getenv(
@@ -68,6 +87,13 @@ class Config:
         str(DATA_DIR / "recording_settings.json"),
     )
     AUTO_RECORD_POLL_SECONDS = _env_int("AUTO_RECORD_POLL_SECONDS", 30)
+    AUTO_RECORD_MAX_PROBE_WORKERS = max(
+        1,
+        _env_int(
+            "AUTO_RECORD_MAX_PROBE_WORKERS",
+            max(2, min(8, os.cpu_count() or 2)),
+        ),
+    )
     TWITCH_CHAT_CAPTURE_ENABLED = _env_bool("TWITCH_CHAT_CAPTURE_ENABLED", True)
     TWITCH_CHAT_HOST = os.getenv("TWITCH_CHAT_HOST", "irc.chat.twitch.tv")
     TWITCH_CHAT_PORT = _env_int("TWITCH_CHAT_PORT", 6667)

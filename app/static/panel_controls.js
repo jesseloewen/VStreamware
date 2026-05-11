@@ -1,5 +1,5 @@
 (() => {
-    const mobileQuery = window.matchMedia('(max-width: 980px)');
+    const mobileQuery = window.matchMedia('(max-width: 1120px)');
     const overlay = document.getElementById('panel-overlay');
     const panelButtons = Array.from(document.querySelectorAll('.panel-toggle'));
     const desktopToggleButtons = panelButtons.filter((button) => Boolean(button.getAttribute('data-desktop-toggle-class')));
@@ -7,9 +7,61 @@
     const savedPanelPollMs = 3000;
     let savedPanelRefreshInFlight = false;
     let savedPanelPollTimer = null;
+    let mainBrowserCardResizeObserver = null;
 
     const getSidePanels = () => Array.from(document.querySelectorAll('.side-panel'));
     const getSavedPanel = () => document.getElementById('saved-panel');
+    const getMainVideoBrowserCard = () => document.querySelector('.browser-page-main .video-browser-card');
+
+    const updateSavedPanelMaxHeight = () => {
+        const savedPanel = getSavedPanel();
+        if (!savedPanel) {
+            return;
+        }
+
+        const panelShell = savedPanel.querySelector('.panel-shell');
+        if (!(panelShell instanceof HTMLElement)) {
+            return;
+        }
+
+        if (mobileQuery.matches) {
+            panelShell.style.removeProperty('--saved-panel-viewport-max-height');
+            return;
+        }
+
+        const mainVideoBrowserCard = getMainVideoBrowserCard();
+        const browserCardHeight = mainVideoBrowserCard instanceof HTMLElement
+            ? Math.floor(mainVideoBrowserCard.getBoundingClientRect().height)
+            : 0;
+
+        if (browserCardHeight <= 0) {
+            panelShell.style.removeProperty('--saved-panel-viewport-max-height');
+            return;
+        }
+
+        panelShell.style.setProperty('--saved-panel-viewport-max-height', `${browserCardHeight}px`);
+    };
+
+    const observeMainVideoBrowserCard = () => {
+        if (typeof ResizeObserver !== 'function') {
+            return;
+        }
+
+        if (mainBrowserCardResizeObserver) {
+            mainBrowserCardResizeObserver.disconnect();
+            mainBrowserCardResizeObserver = null;
+        }
+
+        const mainVideoBrowserCard = getMainVideoBrowserCard();
+        if (!(mainVideoBrowserCard instanceof HTMLElement)) {
+            return;
+        }
+
+        mainBrowserCardResizeObserver = new ResizeObserver(() => {
+            updateSavedPanelMaxHeight();
+        });
+        mainBrowserCardResizeObserver.observe(mainVideoBrowserCard);
+    };
 
     if (panelButtons.length === 0 && getSidePanels().length === 0) {
         return;
@@ -241,6 +293,7 @@
         }
 
         initializeSavedSortUi();
+        updateSavedPanelMaxHeight();
     };
 
     const refreshSavedPanel = async () => {
@@ -283,6 +336,8 @@
             return;
         }
 
+        const formData = new FormData(form);
+
         const submitter = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         if (submitter && 'disabled' in submitter) {
             submitter.disabled = true;
@@ -291,7 +346,7 @@
         try {
             const response = await fetch(actionUrl, {
                 method: 'POST',
-                body: new FormData(form),
+                body: formData,
                 cache: 'no-store',
                 headers: {
                     'X-Requested-With': 'vstreamware-saved-panel-action',
@@ -424,11 +479,23 @@
     });
 
     window.addEventListener('beforeunload', stopSavedPanelPolling);
+    window.addEventListener('beforeunload', () => {
+        if (!mainBrowserCardResizeObserver) {
+            return;
+        }
+
+        mainBrowserCardResizeObserver.disconnect();
+        mainBrowserCardResizeObserver = null;
+    });
 
     const handleViewportChange = () => {
         closePanels();
         syncDesktopButtons();
+        observeMainVideoBrowserCard();
+        updateSavedPanelMaxHeight();
     };
+
+    window.addEventListener('resize', updateSavedPanelMaxHeight);
 
     if (typeof mobileQuery.addEventListener === 'function') {
         mobileQuery.addEventListener('change', handleViewportChange);
@@ -438,5 +505,7 @@
 
     initializeDesktopToggleState();
     initializeSavedSortUi();
+    observeMainVideoBrowserCard();
+    updateSavedPanelMaxHeight();
     startSavedPanelPolling();
 })();

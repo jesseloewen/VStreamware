@@ -143,10 +143,14 @@ Default values are loaded from `.env.example` and `app/config.py`.
 | `SECRET_KEY` | `change-me-in-production` | Flask session/flash security |
 | `STREAMLINK_COMMAND` | `streamlink` | Streamlink executable path/command |
 | `STREAM_DEFAULT_QUALITY` | `best` | Default quality for recording starts |
+| `STREAM_PROBE_TIMEOUT_SECONDS` | `20` | Timeout for each stream live-state probe |
+| `STREAMLINK_EXTRA_ARGS` | empty | Extra Streamlink flags appended to probe and record commands |
+| `RECORDING_BACKGROUND_PRIORITY` | `1` | On Windows, starts recording processes at below-normal background priority |
 | `RECORDINGS_DIR` | `data/recordings` | Root folder for recorded videos |
 | `STREAM_SETTINGS_FILE` | `data/recording_settings.json` | Settings persistence file |
 | `CACHE_DIR` | `data/cache` | Base folder for video cache outputs |
 | `AUTO_RECORD_POLL_SECONDS` | `30` | Auto-recorder poll interval |
+| `AUTO_RECORD_MAX_PROBE_WORKERS` | auto (`2`-`8`) | Max background workers used for parallel channel probes |
 | `LIVE_EDGE_OFFSET_SECONDS` | `60` | Default live playback offset |
 | `LIVE_BUFFER_MIN_SECONDS` | `5` | Minimum buffer in live playback UI |
 | `LIVE_BUFFER_MAX_SECONDS` | `90` | Maximum buffer in live playback UI |

@@ -48,58 +48,45 @@
                                 <p class="muted">Title: {{ item.stream_title }}</p>
                             {% endif %}
                             <div class="saved-controls">
-                                <div class="saved-toggle-group">
-                                <form action="{{ url_for('dashboard.set_channel_auto_recording') }}" method="post" class="saved-control-row">
-                                    <input type="hidden" name="channel" value="{{ item.name }}">
-                                    <div class="saved-control-text">
-                                        <span class="saved-control-title">Auto Record Stream</span>
-                                    </div>
-                                    <label class="toggle-switch" aria-label="Auto recording for {{ item.name }}">
-                                        <input
-                                            type="checkbox"
-                                            name="enabled"
-                                            value="true"
-                                            {% if item.auto_record %}checked{% endif %}
-                                            onchange="this.form.requestSubmit()"
-                                        >
-                                        <span class="toggle-slider" aria-hidden="true"></span>
-                                        <span class="toggle-label">{{ 'ON' if item.auto_record else 'OFF' }}</span>
-                                    </label>
-                                </form>
-                                <form action="{{ url_for('dashboard.set_channel_chat_recording') }}" method="post" class="saved-control-row">
-                                    <input type="hidden" name="channel" value="{{ item.name }}">
-                                    <div class="saved-control-text">
-                                        <span class="saved-control-title">Capture Chat Replay</span>
-                                    </div>
-                                    <label class="toggle-switch" aria-label="Chat recording for {{ item.name }}">
-                                        <input
-                                            type="checkbox"
-                                            name="enabled"
-                                            value="true"
-                                            {% if item.chat_record %}checked{% endif %}
-                                            onchange="this.form.requestSubmit()"
-                                        >
-                                        <span class="toggle-slider" aria-hidden="true"></span>
-                                        <span class="toggle-label">Chat {{ 'ON' if item.chat_record else 'OFF' }}</span>
-                                    </label>
-                                </form>
-                                </div>
-                                <div class="saved-action-group">
-                                {% if item.is_recording %}
-                                    <form action="{{ url_for('dashboard.stop_recording') }}" method="post">
+                                <div class="saved-inline-row">
+                                    <form action="{{ url_for('dashboard.set_channel_auto_recording') }}" method="post" class="saved-auto-row">
                                         <input type="hidden" name="channel" value="{{ item.name }}">
-                                        <button type="submit" class="secondary">Stop Now</button>
+                                        <span class="saved-auto-label">Auto Record</span>
+                                        <label class="toggle-switch" aria-label="Auto recording for {{ item.name }}">
+                                            <input
+                                                type="checkbox"
+                                                name="enabled"
+                                                value="true"
+                                                {% if item.auto_record %}checked{% endif %}
+                                                onchange="this.form.requestSubmit()"
+                                            >
+                                            <span class="toggle-slider" aria-hidden="true"></span>
+                                            <span class="toggle-label">{{ 'ON' if item.auto_record else 'OFF' }}</span>
+                                        </label>
                                     </form>
-                                {% else %}
-                                    <form action="{{ url_for('dashboard.start_recording') }}" method="post">
+                                    {% if item.is_recording %}
+                                        <form action="{{ url_for('dashboard.stop_recording') }}" method="post" class="saved-record-form">
+                                            <input type="hidden" name="channel" value="{{ item.name }}">
+                                            <button type="submit" class="secondary">Stop</button>
+                                        </form>
+                                    {% elif item.live_state == 'live' %}
+                                        <form action="{{ url_for('dashboard.start_recording') }}" method="post" class="saved-record-form">
+                                            <input type="hidden" name="channel" value="{{ item.name }}">
+                                            <button type="submit">Record</button>
+                                        </form>
+                                    {% endif %}
+                                    <form action="{{ url_for('dashboard.remove_channel') }}" method="post" class="saved-remove-form">
                                         <input type="hidden" name="channel" value="{{ item.name }}">
-                                        <button type="submit">Start Now</button>
+                                        <button type="submit" class="danger icon-btn" aria-label="Remove {{ item.name }}">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <polyline points="3 6 5 6 21 6"></polyline>
+                                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                                                <path d="M10 11v6"></path>
+                                                <path d="M14 11v6"></path>
+                                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                                            </svg>
+                                        </button>
                                     </form>
-                                {% endif %}
-                                <form action="{{ url_for('dashboard.remove_channel') }}" method="post">
-                                    <input type="hidden" name="channel" value="{{ item.name }}">
-                                    <button type="submit" class="danger">Remove</button>
-                                </form>
                                 </div>
                             </div>
                         </article>

@@ -13,7 +13,10 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16x16.png') }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/shared.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/theme.css') }}">
 </head>
 <body class="browser-page browser-page-dashboard">
     <main class="container">
@@ -25,14 +28,20 @@
                 </a>
             </h1>
             <div class="header-actions">
-                <a class="button-link" href="{{ url_for('dashboard.index') }}">Home</a>
+                <a class="header-icon-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
+                    <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 10.5 12 3l9 7.5"></path>
+                        <path d="M5 9.5V21h14V9.5"></path>
+                    </svg>
+                    <span class="sr-only">Home</span>
+                </a>
             </div>
-            <p>Twitch recording dashboard with saved channels and per-channel auto recording.</p>
+            <div class="header-panel-row" aria-label="Panel controls">
+                <div class="header-panel-left">
+                    {% include 'partials/saved_panel_toggle_button.html' %}
+                </div>
+            </div>
         </header>
-
-        <div class="mobile-panel-controls" aria-label="Panel controls">
-            {% include 'partials/saved_panel_toggle_button.html' %}
-        </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}

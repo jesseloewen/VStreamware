@@ -13,7 +13,10 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16x16.png') }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/shared.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/theme.css') }}">
 </head>
 <body class="browser-page browser-page-main">
     <main class="container">
@@ -25,14 +28,20 @@
                 </a>
             </h1>
             <div class="header-actions">
-                <a class="button-link" href="{{ url_for('dashboard.settings') }}">Settings</a>
+                <a class="header-icon-link" href="{{ url_for('dashboard.settings') }}" aria-label="Open settings">
+                    <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09a1.7 1.7 0 0 0 1.56-1.04 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.7 1.7 0 0 0 1.87.34H9A1.7 1.7 0 0 0 10 3.09V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c0 .7.42 1.33 1.07 1.6.16.07.33.1.5.1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.7 1.7 0 0 0 19.4 15z"></path>
+                    </svg>
+                    <span class="sr-only">Settings</span>
+                </a>
             </div>
-            <p>Browse recordings in an icon grid. Click any card to open a dedicated single-video page.</p>
+            <div class="header-panel-row" aria-label="Panel controls">
+                <div class="header-panel-left">
+                    {% include 'partials/saved_panel_toggle_button.html' %}
+                </div>
+            </div>
         </header>
-
-        <div class="mobile-panel-controls" aria-label="Panel controls">
-            {% include 'partials/saved_panel_toggle_button.html' %}
-        </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -164,6 +173,24 @@
                 const scaled = bytes / Math.pow(1024, unitIndex);
                 const decimals = unitIndex === 0 ? 0 : 1;
                 return `${scaled.toFixed(decimals)} ${units[unitIndex]}`;
+            };
+
+            const formatDuration = (totalSecondsValue) => {
+                const totalSeconds = Number(totalSecondsValue);
+                if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
+                    return 'n/a';
+                }
+
+                const rounded = Math.max(1, Math.floor(totalSeconds));
+                const hours = Math.floor(rounded / 3600);
+                const minutes = Math.floor((rounded % 3600) / 60);
+                const seconds = rounded % 60;
+
+                if (hours > 0) {
+                    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                }
+
+                return `${minutes}:${String(seconds).padStart(2, '0')}`;
             };
 
             const formatDateTime = (isoString, unixSeconds) => {
@@ -306,7 +333,14 @@
                 const liveBadge = recording.is_live ? '<span class="badge live">LIVE</span>' : '<span class="badge neutral">Recorded</span>';
                 const thumbnailUrl = escapeHtml(recording.thumbnail_url || fallbackThumbUrl);
                 const viewUrl = escapeHtml(String(recording.view_url || '#'));
-                const openLabel = recording.can_play ? 'Open video' : 'Open details';
+                const recordingStartUtcMs = Number(recording.recording_start_utc_ms) || 0;
+                const recordingEndUtcMs = recording.is_live
+                    ? Date.now()
+                    : (Number(recording.recording_end_utc_ms) || 0);
+                const durationSeconds = recordingStartUtcMs > 0 && recordingEndUtcMs > recordingStartUtcMs
+                    ? Math.floor((recordingEndUtcMs - recordingStartUtcMs) / 1000)
+                    : 0;
+                const durationLabel = formatDuration(durationSeconds);
 
                 return `
                     <article class="video-item ${recording.is_live ? 'is-live' : ''}">
@@ -314,7 +348,6 @@
                             <p class="video-channel-label">${channel}</p>
                             <div class="video-thumb-wrap">
                                 <img class="video-thumb" src="${thumbnailUrl}" alt="${title} thumbnail" loading="lazy" decoding="async">
-                                <span class="video-open-indicator">${openLabel}</span>
                             </div>
                             <header class="video-item-header">
                                 <div>
@@ -335,10 +368,47 @@
                                     <dt>Size</dt>
                                     <dd>${escapeHtml(formatBytes(recording.size_bytes))}</dd>
                                 </div>
+                                <div>
+                                    <dt>Length</dt>
+                                    <dd>${escapeHtml(durationLabel)}</dd>
+                                </div>
                             </dl>
                         </a>
                     </article>
                 `;
+            };
+
+            const renderGroupedRecordingsMarkup = (items) => {
+                if (!Array.isArray(items) || items.length === 0) {
+                    return '';
+                }
+
+                const grouped = new Map();
+                for (const item of items) {
+                    const key = String(item.channel || 'unknown');
+                    if (!grouped.has(key)) {
+                        grouped.set(key, []);
+                    }
+                    grouped.get(key).push(item);
+                }
+
+                return Array.from(grouped.entries()).map(([channelName, channelItems]) => {
+                    const safeChannelName = escapeHtml(channelName || 'unknown');
+                    const itemCount = channelItems.length;
+                    const countLabel = itemCount === 1 ? '1 recording' : `${itemCount} recordings`;
+
+                    return `
+                        <section class="video-channel-group">
+                            <header class="video-channel-group-header">
+                                <h4>${safeChannelName}</h4>
+                                <p class="muted">${countLabel}</p>
+                            </header>
+                            <div class="video-channel-group-list">
+                                ${channelItems.map(buildVideoItemMarkup).join('')}
+                            </div>
+                        </section>
+                    `;
+                }).join('');
             };
 
             const renderVideoLists = () => {
@@ -359,7 +429,8 @@
                 const recordedItems = sortRecordings(filtered.filter((item) => !item.is_live));
 
                 liveVideoList.innerHTML = liveItems.map(buildVideoItemMarkup).join('');
-                recordedVideoList.innerHTML = recordedItems.map(buildVideoItemMarkup).join('');
+                recordedVideoList.classList.toggle('grouped-by-channel', recordedItems.length > 0);
+                recordedVideoList.innerHTML = renderGroupedRecordingsMarkup(recordedItems);
 
                 liveVideoEmpty.hidden = liveItems.length > 0;
                 recordedVideoEmpty.hidden = recordedItems.length > 0;
@@ -383,6 +454,8 @@
                     can_play: Boolean(item.can_play),
                     quality: item.quality ? String(item.quality) : '',
                     started_at: item.started_at ? String(item.started_at) : '',
+                    recording_start_utc_ms: Number(item.recording_start_utc_ms) || 0,
+                    recording_end_utc_ms: Number(item.recording_end_utc_ms) || 0,
                 }));
 
                 channelDays = (payload.channel_days && typeof payload.channel_days === 'object')

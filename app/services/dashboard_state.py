@@ -89,7 +89,6 @@ def build_saved_channels_status(
         channel = str(item["name"])
         channel_key = _normalize_channel_name(channel)
         auto_record = bool(item["auto_record"])
-        chat_record = bool(item.get("chat_record", True))
         is_recording = channel_key in active_recording_channels
         recording_started_at = active_recording_started_at.get(channel_key)
         cached_live_info = auto_recorder.get_live_info(channel)
@@ -122,7 +121,6 @@ def build_saved_channels_status(
             {
                 "name": channel,
                 "auto_record": auto_record,
-                "chat_record": chat_record,
                 "notifications": dict(item.get("notifications", {})),
                 "is_live": is_live,
                 "live_state": live_state,
