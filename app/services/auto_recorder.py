@@ -1,4 +1,3 @@
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 import threading
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -13,27 +12,18 @@ class AutoRecorder:
         settings_store: SettingsStore,
         recording_manager: RecordingManager,
         poll_seconds: int,
-        max_probe_workers: int,
         stream_event_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._settings_store = settings_store
         self._recording_manager = recording_manager
         self._poll_seconds = max(5, int(poll_seconds))
-        self._max_probe_workers = max(1, int(max_probe_workers))
         self._stream_event_callback = stream_event_callback
         self._channel_live_states: dict[str, dict[str, str | bool | None]] = {}
         self._last_refresh_at: str | None = None
         self._stop_event = threading.Event()
         self._wait_condition = threading.Condition()
-        self._probe_executor: ThreadPoolExecutor | None = None
         self._thread: threading.Thread | None = None
         self._lock = threading.RLock()
-
-    def _build_probe_executor(self) -> ThreadPoolExecutor:
-        return ThreadPoolExecutor(
-            max_workers=self._max_probe_workers,
-            thread_name_prefix="stream-probe",
-        )
 
     @staticmethod
     def _normalize_channel(channel: str) -> str:
@@ -62,8 +52,6 @@ class AutoRecorder:
                 return
 
             self._stop_event.clear()
-            if self._probe_executor is None:
-                self._probe_executor = self._build_probe_executor()
             self._thread = threading.Thread(
                 target=self._run,
                 name="auto-recorder",
@@ -82,13 +70,6 @@ class AutoRecorder:
         if thread and thread.is_alive():
             thread.join(timeout=5)
 
-        with self._lock:
-            probe_executor = self._probe_executor
-            self._probe_executor = None
-
-        if probe_executor is not None:
-            probe_executor.shutdown(wait=False, cancel_futures=True)
-
     def snapshot(self) -> dict[str, object]:
         with self._lock:
             running = bool(self._thread and self._thread.is_alive())
@@ -102,7 +83,6 @@ class AutoRecorder:
             "enabled_channels": enabled_channels,
             "total_channels": len(saved_channels),
             "poll_seconds": self._poll_seconds,
-            "max_probe_workers": self._max_probe_workers,
             "last_refresh_at": last_refresh_at,
         }
 
@@ -129,69 +109,6 @@ class AutoRecorder:
     def request_refresh(self) -> None:
         with self._wait_condition:
             self._wait_condition.notify()
-
-    @staticmethod
-    def _normalize_stream_info(info: object) -> dict[str, str | bool | None]:
-        if not isinstance(info, dict):
-            return {"is_live": False, "title": None}
-
-        is_live = bool(info.get("is_live", False))
-        raw_title = info.get("title")
-        title: str | None = None
-        if isinstance(raw_title, str):
-            title = raw_title.strip() or None
-
-        return {"is_live": is_live, "title": title}
-
-    def _probe_stream_infos(self, channels: list[str]) -> dict[str, dict[str, str | bool | None]]:
-        if not channels:
-            return {}
-
-        worker_count = min(self._max_probe_workers, len(channels))
-        if worker_count <= 1:
-            return {
-                channel: self._normalize_stream_info(
-                    self._recording_manager.get_channel_stream_info(channel)
-                )
-                for channel in channels
-            }
-
-        with self._lock:
-            probe_executor = self._probe_executor
-
-        if probe_executor is None:
-            return {
-                channel: self._normalize_stream_info(
-                    self._recording_manager.get_channel_stream_info(channel)
-                )
-                for channel in channels
-            }
-
-        stream_infos: dict[str, dict[str, str | bool | None]] = {}
-        futures: dict[Future[dict[str, str | bool | None]], str] = {}
-        for channel in channels:
-            try:
-                future: Future[dict[str, str | bool | None]] = probe_executor.submit(
-                    self._recording_manager.get_channel_stream_info,
-                    channel,
-                )
-            except RuntimeError:
-                return {
-                    fallback_channel: self._normalize_stream_info(
-                        self._recording_manager.get_channel_stream_info(fallback_channel)
-                    )
-                    for fallback_channel in channels
-                }
-            futures[future] = channel
-
-        for future in as_completed(futures):
-            channel = futures[future]
-            try:
-                stream_infos[channel] = self._normalize_stream_info(future.result())
-            except Exception:
-                stream_infos[channel] = {"is_live": False, "title": None}
-
-        return stream_infos
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
@@ -222,17 +139,15 @@ class AutoRecorder:
                     )
 
                 channels_to_check = set(saved_channels_by_name.keys()) | active_recording_channels
-                sorted_channels = sorted(channels_to_check)
-                stream_info_by_channel = self._probe_stream_infos(sorted_channels)
                 next_live_states: dict[str, dict[str, str | bool | None]] = {}
-                for channel in sorted_channels:
+                for channel in sorted(channels_to_check):
                     saved_item = saved_channels_by_name.get(channel)
                     auto_record = bool(saved_item["auto_record"]) if saved_item is not None else False
 
                     is_recording = self._recording_manager.is_recording(channel)
                     recording_started_at = active_recording_started_at.get(channel)
-                    stream_info = dict(
-                        stream_info_by_channel.get(channel, {"is_live": False, "title": None})
+                    stream_info = self._recording_manager.get_channel_stream_info(
+                        channel,
                     )
                     stream_is_live = bool(stream_info["is_live"])
                     is_live = is_recording or stream_is_live

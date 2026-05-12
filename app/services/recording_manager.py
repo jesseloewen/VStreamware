@@ -53,24 +53,17 @@ class RecordingManager:
         default_quality: str,
         default_output_path: str,
         event_callback: Callable[[dict[str, Any]], None] | None = None,
-        stream_probe_timeout_seconds: int = 20,
-        streamlink_extra_args: list[str] | None = None,
-        background_priority: bool = True,
     ) -> None:
         self._streamlink_command = streamlink_command
         self._default_quality = default_quality
         self._default_output_path = default_output_path
         self._event_callback = event_callback
-        self._stream_probe_timeout_seconds = max(5, int(stream_probe_timeout_seconds))
-        self._streamlink_extra_args = list(streamlink_extra_args or [])
-        self._background_priority = bool(background_priority)
         self._jobs: dict[str, RecordingJob] = {}
         self._lock = threading.RLock()
 
     def _streamlink_commands(self, args: list[str]) -> list[list[str]]:
-        full_args = [*self._streamlink_extra_args, *args]
-        primary = [self._streamlink_command, *full_args]
-        fallback = [sys.executable, "-m", "streamlink", *full_args]
+        primary = [self._streamlink_command, *args]
+        fallback = [sys.executable, "-m", "streamlink", *args]
 
         if self._streamlink_command == sys.executable:
             return [primary]
@@ -242,7 +235,7 @@ class RecordingManager:
                         command,
                         capture_output=True,
                         text=True,
-                        timeout=self._stream_probe_timeout_seconds,
+                        timeout=20,
                         check=False,
                     )
                 except FileNotFoundError:
@@ -258,21 +251,6 @@ class RecordingManager:
                     return {"is_live": True, "title": title}
 
         return {"is_live": False, "title": None}
-
-    def _build_streamlink_popen_kwargs(self) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {
-            "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
-        }
-
-        if self._background_priority and sys.platform.startswith("win"):
-            create_no_window = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            below_normal = int(getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0))
-            creationflags = create_no_window | below_normal
-            if creationflags:
-                kwargs["creationflags"] = creationflags
-
-        return kwargs
 
     def start_recording(
         self,
@@ -318,10 +296,10 @@ class RecordingManager:
 
                 for command in self._streamlink_commands(args):
                     try:
-                        popen_kwargs = self._build_streamlink_popen_kwargs()
                         process = subprocess.Popen(
                             command,
-                            **popen_kwargs,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
                         )
                         break
                     except FileNotFoundError:

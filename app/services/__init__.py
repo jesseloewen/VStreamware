@@ -65,16 +65,12 @@ def init_services(app: Flask) -> None:
 		default_quality=app.config["STREAM_DEFAULT_QUALITY"],
 		default_output_path=app.config["RECORDINGS_DIR"],
 		event_callback=recording_event_callback,
-		stream_probe_timeout_seconds=app.config["STREAM_PROBE_TIMEOUT_SECONDS"],
-		streamlink_extra_args=app.config["STREAMLINK_EXTRA_ARGS"],
-		background_priority=app.config["RECORDING_BACKGROUND_PRIORITY"],
 	)
 
 	auto_recorder = AutoRecorder(
 		settings_store=settings_store,
 		recording_manager=recording_manager,
 		poll_seconds=app.config["AUTO_RECORD_POLL_SECONDS"],
-		max_probe_workers=app.config["AUTO_RECORD_MAX_PROBE_WORKERS"],
 		stream_event_callback=notification_dispatcher.handle_event,
 	)
 	auto_recorder.start()
