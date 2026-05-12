@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Callable
 
 from flask import Flask
 
@@ -8,6 +8,7 @@ from .auto_recorder import AutoRecorder
 from .pushover_notifier import PushoverNotifier
 from .recording_manager import RecordingManager
 from .settings_store import SettingsStore
+from .transcode_queue import TranscodeQueueService
 from .twitch_chat_capture import TwitchChatCaptureService
 
 SERVICES_EXTENSION_KEY = "vstreamware_services"
@@ -16,10 +17,14 @@ SERVICES_EXTENSION_KEY = "vstreamware_services"
 def _build_recording_event_callback(
 	notification_dispatcher: NotificationDispatcher,
 	chat_capture_service: TwitchChatCaptureService,
+	transcode_queue_provider: Callable[[], TranscodeQueueService | None],
 ) -> Any:
 	def handle_event(event: dict[str, Any]) -> None:
 		notification_dispatcher.handle_event(event)
 		chat_capture_service.handle_recording_event(event)
+		transcode_queue = transcode_queue_provider()
+		if transcode_queue is not None:
+			transcode_queue.handle_recording_event(event)
 
 	return handle_event
 
@@ -55,9 +60,15 @@ def init_services(app: Flask) -> None:
 		reconnect_max_seconds=app.config["TWITCH_CHAT_RECONNECT_MAX_SECONDS"],
 	)
 
+	transcode_queue_service: TranscodeQueueService | None = None
+
+	def _get_transcode_queue() -> TranscodeQueueService | None:
+		return transcode_queue_service
+
 	recording_event_callback = _build_recording_event_callback(
 		notification_dispatcher=notification_dispatcher,
 		chat_capture_service=chat_capture_service,
+		transcode_queue_provider=_get_transcode_queue,
 	)
 
 	recording_manager = RecordingManager(
@@ -66,6 +77,14 @@ def init_services(app: Flask) -> None:
 		default_output_path=app.config["RECORDINGS_DIR"],
 		event_callback=recording_event_callback,
 	)
+
+	transcode_queue_service = TranscodeQueueService(
+		recordings_dir=app.config["RECORDINGS_DIR"],
+		ffmpeg_command=app.config["FFMPEG_COMMAND"],
+		recording_manager=recording_manager,
+		startup_backfill=True,
+	)
+	transcode_queue_service.start()
 
 	auto_recorder = AutoRecorder(
 		settings_store=settings_store,
@@ -78,6 +97,7 @@ def init_services(app: Flask) -> None:
 	app.extensions[SERVICES_EXTENSION_KEY] = {
 		"settings_store": settings_store,
 		"recording_manager": recording_manager,
+		"transcode_queue": transcode_queue_service,
 		"auto_recorder": auto_recorder,
 		"notification_dispatcher": notification_dispatcher,
 		"chat_capture_service": chat_capture_service,
@@ -102,10 +122,14 @@ def shutdown_services(app: Flask) -> None:
 
 	auto_recorder = services.get("auto_recorder")
 	recording_manager = services.get("recording_manager")
+	transcode_queue = services.get("transcode_queue")
 	chat_capture_service = services.get("chat_capture_service")
 
 	if isinstance(auto_recorder, AutoRecorder):
 		auto_recorder.stop()
+
+	if isinstance(transcode_queue, TranscodeQueueService):
+		transcode_queue.stop()
 
 	if isinstance(recording_manager, RecordingManager):
 		recording_manager.stop_all()

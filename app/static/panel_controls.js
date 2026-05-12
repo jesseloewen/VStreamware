@@ -5,9 +5,139 @@
     const desktopToggleButtons = panelButtons.filter((button) => Boolean(button.getAttribute('data-desktop-toggle-class')));
     const sortStorageKey = 'vstreamware.saved-channels-sort';
     const savedPanelPollMs = 3000;
+    const transcodeStatusPollMs = 1500;
     let savedPanelRefreshInFlight = false;
     let savedPanelPollTimer = null;
+    let transcodeStatusInFlight = false;
+    let transcodeStatusPollTimer = null;
     let mainBrowserCardResizeObserver = null;
+
+    const transcodeStatusUrl = String(document.body.getAttribute('data-transcode-status-url') || '').trim();
+    const headerTranscodeIndicator = document.getElementById('header-transcode-indicator');
+    const headerTranscodeLabel = document.getElementById('header-transcode-label');
+
+    const setHeaderTranscodeIndicator = (visible, label, progressPercent = 0, indeterminate = false) => {
+        if (!headerTranscodeIndicator) {
+            return;
+        }
+
+        headerTranscodeIndicator.hidden = !visible;
+        if (!visible) {
+            headerTranscodeIndicator.classList.remove('is-indeterminate');
+            headerTranscodeIndicator.style.setProperty('--header-transcode-progress', '0%');
+        } else {
+            const normalizedProgress = Number.isFinite(Number(progressPercent))
+                ? Math.max(0, Math.min(100, Math.round(Number(progressPercent))))
+                : 0;
+            headerTranscodeIndicator.style.setProperty('--header-transcode-progress', `${normalizedProgress}%`);
+            headerTranscodeIndicator.classList.toggle('is-indeterminate', Boolean(indeterminate));
+        }
+
+        if (headerTranscodeLabel && typeof label === 'string' && label.trim()) {
+            headerTranscodeLabel.textContent = label;
+        }
+    };
+
+    // Always reset hidden state first to avoid stale visible UI from cached state/style changes.
+    setHeaderTranscodeIndicator(false, 'Transcoding');
+
+    const syncTranscodeIndicator = async () => {
+        if (!headerTranscodeIndicator || !transcodeStatusUrl || transcodeStatusInFlight) {
+            return;
+        }
+
+        transcodeStatusInFlight = true;
+        try {
+            const response = await fetch(transcodeStatusUrl, {
+                cache: 'no-store',
+                headers: {
+                    'X-Requested-With': 'vstreamware-transcode-queue-status',
+                },
+            });
+            if (!response.ok) {
+                throw new Error(`status ${response.status}`);
+            }
+
+            const payload = await response.json();
+            const active = payload && typeof payload.active === 'object' ? payload.active : null;
+            const indicatorText = payload && typeof payload.indicator_text === 'string'
+                ? payload.indicator_text.trim()
+                : '';
+            const activePercentRaw = active ? Number(active.progress_percent) : Number.NaN;
+            const hasActiveProgress = Number.isFinite(activePercentRaw);
+            const activePercent = hasActiveProgress
+                ? Math.max(0, Math.min(100, Math.round(activePercentRaw)))
+                : 0;
+
+            if (!active) {
+                setHeaderTranscodeIndicator(false, 'Transcoding');
+                return;
+            }
+
+            if (indicatorText) {
+                setHeaderTranscodeIndicator(
+                    true,
+                    indicatorText,
+                    hasActiveProgress ? activePercent : 8,
+                    !hasActiveProgress,
+                );
+                return;
+            }
+
+            if (active && (typeof active.file_name === 'string' || typeof active.relative_path === 'string')) {
+                const activeName = String(active.file_name || active.relative_path || '').trim() || 'recording';
+                const fallbackLabel = `${activeName} (${activePercent}%)`;
+                setHeaderTranscodeIndicator(true, fallbackLabel, activePercent, false);
+                return;
+            }
+
+            setHeaderTranscodeIndicator(true, 'Transcoding...', 8, true);
+        } catch (_error) {
+            setHeaderTranscodeIndicator(false, 'Transcoding');
+        } finally {
+            transcodeStatusInFlight = false;
+        }
+    };
+
+    const stopTranscodeStatusPolling = () => {
+        if (transcodeStatusPollTimer === null) {
+            return;
+        }
+
+        window.clearInterval(transcodeStatusPollTimer);
+        transcodeStatusPollTimer = null;
+    };
+
+    const startTranscodeStatusPolling = () => {
+        if (!headerTranscodeIndicator || !transcodeStatusUrl || transcodeStatusPollTimer !== null) {
+            return;
+        }
+
+        transcodeStatusPollTimer = window.setInterval(() => {
+            if (document.hidden) {
+                return;
+            }
+
+            void syncTranscodeIndicator();
+        }, transcodeStatusPollMs);
+    };
+
+    if (headerTranscodeIndicator && transcodeStatusUrl) {
+        void syncTranscodeIndicator();
+        startTranscodeStatusPolling();
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopTranscodeStatusPolling();
+                return;
+            }
+
+            void syncTranscodeIndicator();
+            startTranscodeStatusPolling();
+        });
+
+        window.addEventListener('beforeunload', stopTranscodeStatusPolling);
+    }
 
     const getSidePanels = () => Array.from(document.querySelectorAll('.side-panel'));
     const getSavedPanel = () => document.getElementById('saved-panel');

@@ -122,7 +122,7 @@
     max-height: max(140px, calc(var(--video-chat-height, min(58vh, 620px)) - var(--video-chat-overlay-bottom-clearance, 20px)));
     min-height: 140px;
     z-index: 8;
-    border: 1px solid rgba(95, 95, 95, 0.78);
+    /* border: 1px solid rgba(95, 95, 95, 0.78); */
     background: transparent;
     backdrop-filter: none;
 }

@@ -331,6 +331,92 @@ body.panel-open {
     flex-wrap: wrap;
 }
 
+.header-transcode-indicator {
+    --header-transcode-progress: 0%;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 30px;
+    max-width: min(52vw, 540px);
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(59, 130, 246, 0.45);
+    background: linear-gradient(180deg, rgba(30, 58, 138, 0.35), rgba(30, 41, 59, 0.3));
+    color: #dbeafe;
+    position: relative;
+    overflow: hidden;
+}
+
+.header-transcode-indicator[hidden] {
+    display: none !important;
+}
+
+.header-transcode-indicator::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--header-transcode-progress);
+    background: linear-gradient(90deg, rgba(56, 189, 248, 0.42), rgba(37, 99, 235, 0.62));
+    border-radius: inherit;
+    transition: width 220ms ease-out;
+    z-index: 0;
+}
+
+.header-transcode-indicator.is-indeterminate::before {
+    width: 34%;
+    animation: header-transcode-indeterminate 1.2s ease-in-out infinite;
+}
+
+.header-transcode-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #60a5fa;
+    box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.55);
+    animation: header-transcode-pulse 1.5s ease-out infinite;
+    flex: 0 0 8px;
+    position: relative;
+    z-index: 1;
+}
+
+.header-transcode-label {
+    display: block;
+    max-width: 100%;
+    font-size: 0.75rem;
+    line-height: 1.1;
+    letter-spacing: 0.015em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+    z-index: 1;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
+}
+
+@keyframes header-transcode-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.58);
+    }
+
+    70% {
+        box-shadow: 0 0 0 8px rgba(96, 165, 250, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(96, 165, 250, 0);
+    }
+}
+
+@keyframes header-transcode-indeterminate {
+    0% {
+        transform: translateX(-72%);
+    }
+
+    100% {
+        transform: translateX(260%);
+    }
+}
+
 .header-action-form {
     margin: 0;
 }

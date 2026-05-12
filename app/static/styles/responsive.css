@@ -162,6 +162,16 @@
         display: inline-flex;
     }
 
+    .header-transcode-indicator {
+        max-width: min(66vw, 280px);
+        min-height: 28px;
+        padding: 4px 8px;
+    }
+
+    .header-transcode-label {
+        font-size: 0.7rem;
+    }
+
     .header-action-form {
         width: auto;
     }

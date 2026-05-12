@@ -239,14 +239,6 @@ def _prune_live_thumbnail_cache(root: Path, recording_file: Path, keep_path: Pat
             continue
 
 
-def _video_cache_path(root: Path, recording_file: Path) -> Path:
-    relative_path = recording_file.relative_to(root).as_posix()
-    stat = recording_file.stat()
-    cache_key = f"{relative_path}|{stat.st_size}|{stat.st_mtime_ns}|mp4"
-    digest = hashlib.sha256(cache_key.encode("utf-8")).hexdigest()
-    return _video_cache_dir() / f"{digest}.mp4"
-
-
 def _is_valid_live_dvr_key(key: str) -> bool:
     return bool(_LIVE_DVR_KEY_PATTERN.fullmatch(key))
 
@@ -545,14 +537,10 @@ def _materialize_ts_mp4_file(ts_path: Path, output_path: Path | None = None) -> 
     if ffmpeg_binary is None:
         return None
 
-    root = _recordings_root_path()
-    if output_path is not None:
-        cache_path = output_path
-    else:
-        try:
-            cache_path = _video_cache_path(root, ts_path)
-        except (OSError, ValueError):
-            return None
+    if output_path is None:
+        return None
+
+    cache_path = output_path
 
     transcode_lock = _transcode_output_lock(cache_path)
     with transcode_lock:
@@ -729,12 +717,25 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
                     continue
 
                 day_name = day_dir.name
-                for recording_file in sorted(day_dir.iterdir(), key=lambda path: path.name.lower()):
-                    if not recording_file.is_file():
-                        continue
+                day_files = [
+                    path
+                    for path in sorted(day_dir.iterdir(), key=lambda path: path.name.lower())
+                    if path.is_file()
+                ]
+                mp4_stems = {
+                    path.stem
+                    for path in day_files
+                    if path.suffix.lower() == ".mp4"
+                }
+
+                for recording_file in day_files:
 
                     suffix = recording_file.suffix.lower()
                     if suffix and suffix not in VIDEO_EXTENSIONS:
+                        continue
+
+                    # Prefer finalized MP4 when both MP4 and TS are present for the same recording stem.
+                    if suffix == ".ts" and recording_file.stem in mp4_stems:
                         continue
 
                     try:
@@ -1116,6 +1117,53 @@ def status() -> object:
     return jsonify(dashboard_state)
 
 
+@dashboard_bp.get("/transcode/status")
+def transcode_queue_status() -> object:
+    services = get_services(current_app)
+    transcode_queue = services.get("transcode_queue")
+    snapshot = {
+        "running": False,
+        "is_working": False,
+        "queued_count": 0,
+        "failed_count": 0,
+        "active": None,
+        "last_failed": None,
+        "indicator_text": "",
+    }
+
+    get_snapshot = getattr(transcode_queue, "snapshot", None)
+    if callable(get_snapshot):
+        try:
+            payload = get_snapshot()
+            if isinstance(payload, dict):
+                snapshot = payload
+        except Exception:
+            pass
+
+    return jsonify(snapshot)
+
+
+@dashboard_bp.post("/transcode/backfill")
+def transcode_backfill() -> object:
+    services = get_services(current_app)
+    transcode_queue = services.get("transcode_queue")
+    enqueue_existing = getattr(transcode_queue, "enqueue_existing_recordings", None)
+    queued_count = 0
+
+    if callable(enqueue_existing):
+        try:
+            queued_count = int(enqueue_existing())
+        except Exception:
+            queued_count = 0
+
+    if queued_count > 0:
+        flash(f"Queued {queued_count} recording transcode jobs.", "success")
+    else:
+        flash("No additional TS recordings were eligible for backfill.", "success")
+
+    return _redirect_back("dashboard.settings")
+
+
 @dashboard_bp.get("/channels/panel")
 def saved_channels_panel_partial() -> str:
     services = get_services(current_app)
@@ -1152,6 +1200,21 @@ def view_recording(recording_slug: str) -> object:
     requested_slug = Path(recording_slug).as_posix().strip("/")
     if canonical_slug and requested_slug != canonical_slug:
         return redirect(url_for("dashboard.view_recording", recording_slug=canonical_slug), code=302)
+
+    # Visiting a completed TS recording should enqueue the same persistent queue job
+    # that continues even if the client leaves the page.
+    if not bool(record.get("is_live", False)):
+        relative_path = str(record.get("relative_path", "")).strip()
+        if relative_path.lower().endswith(".ts"):
+            resolved_path = _resolve_recording_path(_recordings_root_path(), relative_path)
+            if resolved_path is not None and resolved_path.exists() and resolved_path.is_file():
+                transcode_queue = services.get("transcode_queue")
+                enqueue = getattr(transcode_queue, "enqueue_file", None)
+                if callable(enqueue):
+                    try:
+                        enqueue(resolved_path, reason="view-recording")
+                    except Exception:
+                        pass
 
     live_buffer_default = _live_buffer_default_seconds()
     live_buffer_min, live_buffer_max = _live_buffer_bounds()
@@ -1234,9 +1297,20 @@ def recording_thumbnail(recording_path: str) -> object:
 @dashboard_bp.get("/recordings/media/<path:recording_path>")
 def recording_media(recording_path: str) -> object:
     root = _recordings_root_path()
+    requested_suffix = Path(recording_path).suffix.lower()
     resolved_path = _resolve_recording_path(root, recording_path)
-    if resolved_path is None or not resolved_path.exists() or not resolved_path.is_file():
+    if resolved_path is None:
         abort(404)
+
+    if not resolved_path.exists() or not resolved_path.is_file():
+        if requested_suffix == ".ts":
+            mp4_fallback = _resolve_recording_path(root, str(Path(recording_path).with_suffix(".mp4")))
+            if mp4_fallback is not None and mp4_fallback.exists() and mp4_fallback.is_file():
+                resolved_path = mp4_fallback
+            else:
+                abort(404)
+        else:
+            abort(404)
 
     transient_cache_id = request.args.get("transient_id", "").strip()
     if not _is_valid_transient_cache_id(transient_cache_id):
@@ -1286,11 +1360,15 @@ def recording_media(recording_path: str) -> object:
                 start_from_end_seconds=live_buffer_seconds,
             )
 
-        converted_mp4 = _materialize_ts_mp4_file(resolved_path)
+        finalized_mp4 = resolved_path.with_suffix(".mp4")
+        try:
+            finalized_size = int(finalized_mp4.stat().st_size) if finalized_mp4.exists() else 0
+        except OSError:
+            finalized_size = 0
 
-        if converted_mp4 is not None:
+        if finalized_size > 0:
             response = send_file(
-                converted_mp4,
+                finalized_mp4,
                 mimetype="video/mp4",
                 conditional=True,
                 as_attachment=False,
@@ -1301,7 +1379,24 @@ def recording_media(recording_path: str) -> object:
             response.headers["X-Playback-Transcoded-File"] = "true"
             return response
 
-        return _stream_ts_as_mp4(resolved_path)
+        transcode_queue = services.get("transcode_queue")
+        enqueue = getattr(transcode_queue, "enqueue_file", None)
+        if callable(enqueue):
+            try:
+                enqueue(resolved_path, reason="playback-request")
+            except Exception:
+                pass
+
+        return Response(
+            "Recording transcode is still in progress. Please retry shortly.",
+            status=425,
+            mimetype="text/plain",
+            headers={
+                "Cache-Control": "no-store",
+                "Retry-After": "2",
+                "X-Playback-Transcode-Pending": "true",
+            },
+        )
 
     forced_mime_type = FORCED_VIDEO_MIME_TYPES.get(suffix)
     guessed_mime_type, _ = mimetypes.guess_type(str(resolved_path))
@@ -1325,8 +1420,33 @@ def recording_media(recording_path: str) -> object:
 @dashboard_bp.get("/recordings/transcode-status/<path:recording_path>")
 def recording_transcode_status(recording_path: str) -> object:
     root = _recordings_root_path()
+    requested_path = Path(recording_path)
+    requested_suffix = requested_path.suffix.lower()
     resolved_path = _resolve_recording_path(root, recording_path)
-    if resolved_path is None or not resolved_path.exists() or not resolved_path.is_file():
+    if resolved_path is None:
+        abort(404)
+
+    if (not resolved_path.exists() or not resolved_path.is_file()) and requested_suffix == ".ts":
+        mp4_fallback = _resolve_recording_path(root, str(requested_path.with_suffix(".mp4")))
+        if mp4_fallback is not None and mp4_fallback.exists() and mp4_fallback.is_file():
+            source_size_bytes = 0
+            try:
+                source_size_bytes = int(mp4_fallback.stat().st_size)
+            except OSError:
+                source_size_bytes = 0
+
+            return jsonify(
+                {
+                    "available": True,
+                    "is_transcoding": False,
+                    "progress_percent": 100,
+                    "progress_label": "Ready",
+                    "source_size_bytes": source_size_bytes,
+                    "cached_size_bytes": source_size_bytes,
+                }
+            )
+
+    if not resolved_path.exists() or not resolved_path.is_file():
         abort(404)
 
     suffix = resolved_path.suffix.lower()
@@ -1363,49 +1483,86 @@ def recording_transcode_status(recording_path: str) -> object:
             }
         )
 
+    finalized_mp4 = resolved_path.with_suffix(".mp4")
+    finalized_size_bytes = 0
     try:
-        cache_path = _video_cache_path(root, resolved_path)
-    except (OSError, ValueError):
-        cache_path = None
+        if finalized_mp4.exists() and finalized_mp4.is_file():
+            finalized_size_bytes = int(finalized_mp4.stat().st_size)
+    except OSError:
+        finalized_size_bytes = 0
 
-    cached_size_bytes = 0
-    is_cached_ready = False
-    is_transcoding = False
+    if finalized_size_bytes > 0:
+        return jsonify(
+            {
+                "available": True,
+                "is_transcoding": False,
+                "progress_percent": 100,
+                "progress_label": "Ready",
+                "source_size_bytes": source_size_bytes,
+                "cached_size_bytes": finalized_size_bytes,
+            }
+        )
 
-    if cache_path is not None:
+    transcode_queue = services.get("transcode_queue")
+    file_status: dict[str, object] = {"state": "pending", "progress_percent": 0, "output_size_bytes": 0}
+    get_file_status = getattr(transcode_queue, "get_file_status", None)
+    if callable(get_file_status):
         try:
-            if cache_path.exists() and cache_path.is_file():
-                cached_size_bytes = int(cache_path.stat().st_size)
-                is_cached_ready = cached_size_bytes > 0
-        except OSError:
-            cached_size_bytes = 0
-            is_cached_ready = False
+            status_payload = get_file_status(resolved_path)
+            if isinstance(status_payload, dict):
+                file_status = status_payload
+        except Exception:
+            file_status = {"state": "pending", "progress_percent": 0, "output_size_bytes": 0}
 
-        is_transcoding = _is_transcode_output_locked(cache_path)
+    state = str(file_status.get("state", "pending")).strip().lower()
+    progress_percent = int(file_status.get("progress_percent", 0) or 0)
+    cached_size_bytes = int(file_status.get("output_size_bytes", 0) or 0)
 
-    progress_percent = 0
-    if is_cached_ready and not is_transcoding:
-        progress_percent = 100
-    elif source_size_bytes > 0 and cached_size_bytes > 0:
-        progress_percent = max(1, min(99, int((cached_size_bytes / source_size_bytes) * 100)))
-    elif is_transcoding:
-        progress_percent = 1
+    if state in {"pending", "missing"}:
+        enqueue = getattr(transcode_queue, "enqueue_file", None)
+        if callable(enqueue):
+            try:
+                did_queue = bool(enqueue(resolved_path, reason="status-request"))
+                if did_queue:
+                    state = "queued"
+            except Exception:
+                pass
 
-    if is_cached_ready and not is_transcoding:
+    if state == "ready":
         progress_label = "Ready"
-    elif is_transcoding:
+        progress_percent = 100
+        is_transcoding = False
+        available = True
+    elif state == "transcoding":
         progress_label = "Transcoding"
+        progress_percent = max(1, min(99, progress_percent))
+        is_transcoding = True
+        available = False
+    elif state == "queued":
+        progress_label = "Queued"
+        progress_percent = 0
+        is_transcoding = False
+        available = False
+    elif state == "failed":
+        progress_label = "Failed"
+        progress_percent = 0
+        is_transcoding = False
+        available = False
     else:
         progress_label = "Preparing"
+        progress_percent = 0
+        is_transcoding = False
+        available = False
 
     return jsonify(
         {
-            "available": bool(is_cached_ready and not is_transcoding),
+            "available": available,
             "is_transcoding": bool(is_transcoding),
             "progress_percent": progress_percent,
             "progress_label": progress_label,
             "source_size_bytes": source_size_bytes,
             "cached_size_bytes": cached_size_bytes,
+            "error": file_status.get("error") if state == "failed" else None,
         }
     )
 
@@ -1563,11 +1720,14 @@ def clear_cache() -> object:
 
     if removed_anything:
         flash(
-            f"Cache cleared. Removed {removed_files} files and {removed_dirs} directories.",
+            (
+                "Live/thumbnail cache cleared. "
+                f"Removed {removed_files} files and {removed_dirs} directories."
+            ),
             "success",
         )
     else:
-        flash("Cache was already empty.", "success")
+        flash("Live and thumbnail caches were already empty.", "success")
 
     return _redirect_back("dashboard.index")
 

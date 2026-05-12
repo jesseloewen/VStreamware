@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/responsive.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/theme.css') }}">
 </head>
-<body class="browser-page browser-page-video">
+<body class="browser-page browser-page-video" data-transcode-status-url="{{ url_for('dashboard.transcode_queue_status') }}">
     <main class="container">
         <header class="page-header browser-header">
             <h1 class="app-title">
@@ -28,6 +28,10 @@
                 </a>
             </h1>
             <div class="header-actions">
+                <div class="header-transcode-indicator" id="header-transcode-indicator" hidden role="status" aria-live="polite" aria-atomic="true">
+                    <span class="header-transcode-dot" aria-hidden="true"></span>
+                    <span class="header-transcode-label" id="header-transcode-label">Transcoding</span>
+                </div>
                 <a class="header-icon-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
                     <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M3 10.5 12 3l9 7.5"></path>
@@ -2428,8 +2432,17 @@
             let transcodePollTimer = null;
             let transcodeStatusInFlight = false;
             let isAwaitingRecordedSourceReady = false;
+            let hasRecordedSourceLoadStarted = false;
 
             const recordedTranscodePollMs = 900;
+
+            const setRecordedVideoVisible = (visible) => {
+                if (isLive || !player) {
+                    return;
+                }
+
+                player.style.visibility = visible ? 'visible' : 'hidden';
+            };
 
             setChatSyncSource(readPersistedChatSyncSource(), false);
 
@@ -2530,11 +2543,11 @@
 
             const syncRecordedTranscodeOverlay = async (force = false) => {
                 if (isLive || !recordingTranscodeStatusUrl || !isAwaitingRecordedSourceReady) {
-                    return;
+                    return 'idle';
                 }
 
                 if (!force && transcodeStatusInFlight) {
-                    return;
+                    return 'busy';
                 }
 
                 transcodeStatusInFlight = true;
@@ -2552,34 +2565,52 @@
                     const payload = await response.json();
                     const available = Boolean(payload.available);
                     const isTranscoding = Boolean(payload.is_transcoding);
+                    const progressLabelRaw = typeof payload.progress_label === 'string' ? payload.progress_label : '';
+                    const progressLabel = progressLabelRaw.trim().toLowerCase();
                     const progressPercentRaw = Number(payload.progress_percent);
                     const progressPercent = Number.isFinite(progressPercentRaw)
                         ? Math.max(0, Math.min(100, progressPercentRaw))
                         : 0;
 
                     if (available && !isTranscoding) {
+                        isAwaitingRecordedSourceReady = false;
+                        stopRecordedTranscodePolling();
                         setTranscodeOverlayVisible(false);
-                        return;
+                        return 'ready';
+                    }
+
+                    if (progressLabel === 'failed') {
+                        isAwaitingRecordedSourceReady = false;
+                        stopRecordedTranscodePolling();
+                        setTranscodeOverlayState({
+                            visible: true,
+                            title: 'Unable to prepare full video',
+                            message: 'Transcoding failed. The source TS was kept. Retry from Settings > Queue TS Backfill.',
+                            percent: 0,
+                            indeterminate: true,
+                        });
+                        return 'failed';
                     }
 
                     if (isTranscoding) {
                         setTranscodeOverlayState({
                             visible: true,
-                            title: 'Transcoding video...',
-                            message: 'Preparing browser-friendly playback. You can start watching as soon as this finishes.',
+                            title: 'Preparing full video...',
+                            message: 'Building seekable MP4 playback. Video will load when ready.',
                             percent: progressPercent,
                             indeterminate: progressPercent <= 0,
                         });
-                        return;
+                        return 'transcoding';
                     }
 
                     setTranscodeOverlayState({
                         visible: true,
-                        title: 'Preparing video...',
-                        message: 'Waiting for transcode to start.',
+                        title: 'Queueing video...',
+                        message: 'Waiting for background transcoder to pick up this recording.',
                         percent: 0,
                         indeterminate: true,
                     });
+                    return 'queued';
                 } catch (_error) {
                     setTranscodeOverlayState({
                         visible: true,
@@ -2588,9 +2619,43 @@
                         percent: 0,
                         indeterminate: true,
                     });
+                    return 'error';
                 } finally {
                     transcodeStatusInFlight = false;
                 }
+            };
+
+            const waitForRecordedSourceReady = async () => {
+                if (isLive || !recordingTranscodeStatusUrl) {
+                    return true;
+                }
+
+                isAwaitingRecordedSourceReady = true;
+                setRecordedVideoVisible(false);
+                setTranscodeOverlayState({
+                    visible: true,
+                    title: 'Preparing full video...',
+                    message: 'Checking transcode queue status.',
+                    percent: 0,
+                    indeterminate: true,
+                });
+                startRecordedTranscodePolling();
+
+                while (isAwaitingRecordedSourceReady) {
+                    const state = await syncRecordedTranscodeOverlay(true);
+                    if (state === 'ready') {
+                        return true;
+                    }
+
+                    if (state === 'failed') {
+                        return false;
+                    }
+
+                    await new Promise((resolve) => {
+                        window.setTimeout(resolve, recordedTranscodePollMs);
+                    });
+                }
+                return true;
             };
 
             const startRecordedTranscodePolling = () => {
@@ -2725,10 +2790,6 @@
                 currentTranscodeCacheId = nextTranscodeCacheId;
 
                 const wasPaused = player.paused;
-                if (!isLive) {
-                    isAwaitingRecordedSourceReady = true;
-                    startRecordedTranscodePolling();
-                }
                 player.src = sourceUrl;
                 player.load();
 
@@ -2738,9 +2799,11 @@
 
                 const handleReady = () => {
                     if (!isLive) {
+                        hasRecordedSourceLoadStarted = true;
                         isAwaitingRecordedSourceReady = false;
                         stopRecordedTranscodePolling();
                         setTranscodeOverlayVisible(false);
+                        setRecordedVideoVisible(true);
                     }
 
                     if (typeof onReady === 'function') {
@@ -3301,8 +3364,27 @@
             if (isLive) {
                 switchToDirectLive();
             } else {
-                const recordedSource = buildRecordedMediaSource();
-                loadSource(recordedSource);
+                void (async () => {
+                    const ready = await waitForRecordedSourceReady();
+                    if (!ready) {
+                        return;
+                    }
+
+                    const recordedSource = buildRecordedMediaSource();
+                    const loaded = loadSource(recordedSource);
+                    if (!loaded) {
+                        setTranscodeOverlayState({
+                            visible: true,
+                            title: 'Unable to load video',
+                            message: 'The finalized MP4 source is not available yet. Please retry shortly.',
+                            percent: 0,
+                            indeterminate: true,
+                        });
+                        return;
+                    }
+
+                    hasRecordedSourceLoadStarted = true;
+                })();
             }
 
             void syncChatTimeline(liveOffsetSeconds, true);
@@ -3406,7 +3488,7 @@
             });
 
             player.addEventListener('error', () => {
-                if (isLive || !isAwaitingRecordedSourceReady) {
+                if (isLive || !hasRecordedSourceLoadStarted) {
                     return;
                 }
 

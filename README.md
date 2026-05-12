@@ -26,14 +26,16 @@ It provides:
 - Optional Twitch chat capture per recording
 - Video browser with thumbnails and filters
 - In-browser playback with live DVR behavior for active `.ts` recordings
-- Cache management for generated thumbnails/transcodes
+- Background TS-to-MP4 conversion queue for completed recordings
+- Cache management for thumbnails and live DVR snapshot/transient media
 
 ## Core Features
 
 - Dashboard and settings UI for channel operations
 - Background auto-recorder worker that polls live state
 - Recording file naming with sanitized stream titles and UTC timestamps
-- Playback API that can transcode `.ts` to `.mp4` for browser compatibility
+- Automatic in-place conversion of completed `.ts` recordings to `.mp4` (with source cleanup)
+- Playback API that keeps active live `.ts` playback browser-friendly via live DVR snapshot/transmux behavior
 - Chat sidecar files (`.chat.ndjson`) with timeline replay in the video detail view
 - Health endpoint for uptime checks
 
@@ -145,7 +147,7 @@ Default values are loaded from `.env.example` and `app/config.py`.
 | `STREAM_DEFAULT_QUALITY` | `best` | Default quality for recording starts |
 | `RECORDINGS_DIR` | `data/recordings` | Root folder for recorded videos |
 | `STREAM_SETTINGS_FILE` | `data/recording_settings.json` | Settings persistence file |
-| `CACHE_DIR` | `data/cache` | Base folder for video cache outputs |
+| `CACHE_DIR` | `data/cache` | Base folder for thumbnail/live snapshot cache outputs |
 | `AUTO_RECORD_POLL_SECONDS` | `30` | Auto-recorder poll interval |
 | `LIVE_EDGE_OFFSET_SECONDS` | `60` | Default live playback offset |
 | `LIVE_BUFFER_MIN_SECONDS` | `5` | Minimum buffer in live playback UI |
@@ -153,7 +155,7 @@ Default values are loaded from `.env.example` and `app/config.py`.
 | `LIVE_DIRECT_START_FROM_END_SECONDS` | `30` | Fallback direct-live start position |
 | `FFMPEG_COMMAND` | `ffmpeg` | FFmpeg executable path/command |
 | `VIDEO_THUMBNAIL_CACHE_DIR` | `data/cache/video-thumbnails` | Thumbnail cache location (derived from `CACHE_DIR`) |
-| `VIDEO_TRANSCODE_CACHE_DIR` | `data/cache/video-transcodes` | Transcoded media cache location (derived from `CACHE_DIR`) |
+| `VIDEO_TRANSCODE_CACHE_DIR` | `data/cache/video-transcodes` | Live DVR snapshot/transient cache location (derived from `CACHE_DIR`) |
 | `VIDEO_THUMBNAIL_WIDTH` | `480` | Thumbnail width |
 | `VIDEO_THUMBNAIL_HEIGHT` | `270` | Thumbnail height |
 | `TWITCH_CHAT_CAPTURE_ENABLED` | `1` | Global toggle for chat capture |
@@ -191,10 +193,11 @@ Recommended flow:
 
 Generated/Runtime files:
 
-- `data/recordings/<channel>/<YYYY-MM-DD>/<title>_<YYYYMMDD_HHMMSS>.ts`
+- `data/recordings/<channel>/<YYYY-MM-DD>/<title>_<YYYYMMDD_HHMMSS>.ts` while active or pending conversion
+- `data/recordings/<channel>/<YYYY-MM-DD>/<title>_<YYYYMMDD_HHMMSS>.mp4` finalized completed recording
 - `data/recordings/.../<file>.chat.ndjson` for captured chat
 - `data/recording_settings.json` for saved channels and preferences
-- `data/cache/video-thumbnails` and `data/cache/video-transcodes`
+- `data/cache/video-thumbnails` and `data/cache/video-transcodes` (live DVR snapshots/transient files)
 
 Ignored by git:
 
@@ -211,6 +214,7 @@ Primary endpoints:
 - `GET /` main browser view
 - `GET /Settings` dashboard/settings screen
 - `GET /status` aggregated dashboard state (JSON)
+- `GET /transcode/status` transcode queue status for header indicator (JSON)
 - `GET /recordings/index` recording catalog (JSON)
 - `GET /recordings/view/<path>` single recording page
 - `GET /recordings/media/<path>` media stream/download source
@@ -224,7 +228,8 @@ Primary endpoints:
 - `POST /notifications/test` send notification test message
 - `POST /recording/start` manual recording start
 - `POST /recording/stop` manual recording stop
-- `POST /cache/clear` clear thumbnail/transcode caches
+- `POST /transcode/backfill` queue existing eligible TS recordings for background conversion
+- `POST /cache/clear` clear thumbnail/live snapshot caches
 - `GET /health` health check
 
 ## Typical Workflow
@@ -241,6 +246,8 @@ Primary endpoints:
   - Install Streamlink or set `STREAMLINK_COMMAND` to the full executable path.
 - Thumbnails or playback conversion not working.
   - Install FFmpeg and verify `FFMPEG_COMMAND`.
+- Completed recordings still showing as `.ts` for a while.
+  - The transcode queue runs in the background. Use the dashboard backfill action to enqueue remaining eligible TS files.
 - No notifications received.
   - Set valid `PUSHOVER_APP_TOKEN` and `PUSHOVER_USER_KEY`, then use the test notification action.
 - Chat replay is empty.

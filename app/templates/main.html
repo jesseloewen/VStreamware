@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/responsive.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/theme.css') }}">
 </head>
-<body class="browser-page browser-page-main">
+<body class="browser-page browser-page-main" data-transcode-status-url="{{ url_for('dashboard.transcode_queue_status') }}">
     <main class="container">
         <header class="page-header browser-header">
             <h1 class="app-title">
@@ -28,6 +28,10 @@
                 </a>
             </h1>
             <div class="header-actions">
+                <div class="header-transcode-indicator" id="header-transcode-indicator" hidden role="status" aria-live="polite" aria-atomic="true">
+                    <span class="header-transcode-dot" aria-hidden="true"></span>
+                    <span class="header-transcode-label" id="header-transcode-label">Transcoding</span>
+                </div>
                 <a class="header-icon-link" href="{{ url_for('dashboard.settings') }}" aria-label="Open settings">
                     <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <circle cx="12" cy="12" r="3"></circle>
