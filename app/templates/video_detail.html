@@ -340,10 +340,26 @@
             const chatPanelToggleButtons = Array.from(document.querySelectorAll('[data-chat-panel-toggle]'));
             const sharedPanelOverlay = document.getElementById('panel-overlay');
             const displayTimezonePreference = {{ display_timezone | tojson }};
-            const isLive = {{ 'true' if recording.is_live else 'false' }};
+            let isLive = {{ 'true' if recording.is_live else 'false' }};
             const chatUrl = {{ recording.chat_url | tojson }};
             const recordingSizeUrl = {{ url_for('dashboard.recording_size', recording_slug=recording.view_slug) | tojson }};
             const recordingTranscodeStatusUrl = {{ recording.transcode_status_url | tojson }};
+            const buildRecordedPlaybackStatusUrl = (rawUrl) => {
+                const baseUrl = String(rawUrl || '').trim();
+                if (!baseUrl) {
+                    return '';
+                }
+
+                try {
+                    const parsed = new URL(baseUrl, window.location.href);
+                    parsed.searchParams.set('mode', 'recorded');
+                    return parsed.toString();
+                } catch (_error) {
+                    const separator = baseUrl.includes('?') ? '&' : '?';
+                    return `${baseUrl}${separator}mode=recorded`;
+                }
+            };
+            const recordedPlaybackTranscodeStatusUrl = buildRecordedPlaybackStatusUrl(recordingTranscodeStatusUrl);
             const releaseTranscodeUrl = {{ url_for('dashboard.release_transcode_cache') | tojson }};
             let recordingStartUtcMs = {{ recording.recording_start_utc_ms if recording.recording_start_utc_ms is not none else 'null' }};
             const liveOffsetSecondsDefault = {{ live_buffer_default_seconds }};
@@ -2433,6 +2449,7 @@
             let transcodeStatusInFlight = false;
             let isAwaitingRecordedSourceReady = false;
             let hasRecordedSourceLoadStarted = false;
+            let liveToRecordedTransitionInFlight = false;
 
             const recordedTranscodePollMs = 900;
 
@@ -2442,6 +2459,14 @@
                 }
 
                 player.style.visibility = visible ? 'visible' : 'hidden';
+            };
+
+            const getActiveTranscodeStatusUrl = () => {
+                if (isLive || liveToRecordedTransitionInFlight) {
+                    return recordedPlaybackTranscodeStatusUrl || recordingTranscodeStatusUrl;
+                }
+
+                return recordingTranscodeStatusUrl;
             };
 
             setChatSyncSource(readPersistedChatSyncSource(), false);
@@ -2542,7 +2567,8 @@
             };
 
             const syncRecordedTranscodeOverlay = async (force = false) => {
-                if (isLive || !recordingTranscodeStatusUrl || !isAwaitingRecordedSourceReady) {
+                const activeStatusUrl = getActiveTranscodeStatusUrl();
+                if (isLive || !activeStatusUrl || !isAwaitingRecordedSourceReady) {
                     return 'idle';
                 }
 
@@ -2552,7 +2578,7 @@
 
                 transcodeStatusInFlight = true;
                 try {
-                    const response = await fetch(recordingTranscodeStatusUrl, {
+                    const response = await fetch(activeStatusUrl, {
                         cache: 'no-store',
                         headers: {
                             'X-Requested-With': 'vstreamware-transcode-status',
@@ -2626,7 +2652,7 @@
             };
 
             const waitForRecordedSourceReady = async () => {
-                if (isLive || !recordingTranscodeStatusUrl) {
+                if (isLive || !getActiveTranscodeStatusUrl()) {
                     return true;
                 }
 
@@ -2659,7 +2685,7 @@
             };
 
             const startRecordedTranscodePolling = () => {
-                if (isLive || !recordingTranscodeStatusUrl || !isAwaitingRecordedSourceReady) {
+                if (isLive || !getActiveTranscodeStatusUrl() || !isAwaitingRecordedSourceReady) {
                     return;
                 }
 
@@ -3080,12 +3106,20 @@
                 const liveOn = Boolean(isLive && !inDvrMode);
 
                 if (liveModeToggleButton) {
-                    liveModeToggleButton.classList.toggle('is-live-edge', liveOn);
-                    liveModeToggleButton.textContent = 'LIVE';
-                    liveModeToggleButton.setAttribute('aria-label', liveOn ? 'Switch to DVR mode' : 'Return to live mode');
+                    liveModeToggleButton.hidden = !isLive;
+                    liveModeToggleButton.disabled = !isLive;
 
-                    if (snapshotRefreshButton) {
-                        snapshotRefreshButton.hidden = false;
+                    if (isLive) {
+                        liveModeToggleButton.classList.toggle('is-live-edge', liveOn);
+                        liveModeToggleButton.textContent = 'LIVE';
+                        liveModeToggleButton.setAttribute('aria-label', liveOn ? 'Switch to DVR mode' : 'Return to live mode');
+                    }
+                }
+
+                if (snapshotRefreshButton) {
+                    snapshotRefreshButton.hidden = !isLive;
+                    snapshotRefreshButton.disabled = !isLive;
+                    if (isLive) {
                         snapshotRefreshButton.setAttribute('aria-label', liveOn ? 'Refresh live' : 'Refresh snapshot');
                     }
                 }
@@ -3251,6 +3285,10 @@
             };
 
             const switchToDirectLive = (jumpClosestToLiveEdge = false) => {
+                if (!isLive) {
+                    return;
+                }
+
                 inDvrMode = false;
                 const loaded = loadSource(buildDirectLiveSource(), () => {
                     startNearLiveEdge(jumpClosestToLiveEdge ? calculateSmoothBufferSeconds() : liveOffsetSeconds);
@@ -3266,6 +3304,10 @@
             };
 
             const switchToDvrMode = (targetTime, options = {}) => {
+                if (!isLive) {
+                    return;
+                }
+
                 const dvrSource = buildLiveDvrSource();
                 if (!dvrSource.url) {
                     return;
@@ -3304,8 +3346,101 @@
                 }
             };
 
+            const transitionLivePlaybackToRecorded = async (options = {}) => {
+                if (!isLive || liveToRecordedTransitionInFlight) {
+                    return false;
+                }
+
+                liveToRecordedTransitionInFlight = true;
+                const resumePlayback = Boolean(options.resumePlayback);
+                const preservedTime = Number.isFinite(player.currentTime) ? Math.max(player.currentTime, 0) : 0;
+
+                try {
+                    inDvrMode = false;
+                    isLive = false;
+                    liveRefreshInFlight = false;
+
+                    updateModeControls();
+
+                    const ready = await waitForRecordedSourceReady();
+                    if (!ready) {
+                        return false;
+                    }
+
+                    const recordedSource = buildRecordedMediaSource();
+                    const loaded = loadSource(recordedSource, () => {
+                        if (Number.isFinite(preservedTime) && preservedTime > 0) {
+                            try {
+                                player.currentTime = preservedTime;
+                            } catch (_error) {
+                                // Preserve progress best-effort when switching to finalized MP4.
+                            }
+                        }
+
+                        if (resumePlayback) {
+                            tryPlay();
+                        }
+
+                        lastProgressAt = Date.now();
+                        lastProgressTime = player.currentTime;
+                        updateModeControls();
+                        void syncChatTimeline(liveOffsetSeconds, true);
+                    });
+
+                    if (!loaded) {
+                        setTranscodeOverlayState({
+                            visible: true,
+                            title: 'Unable to load video',
+                            message: 'The finalized MP4 source is not available yet. Please retry shortly.',
+                            percent: 0,
+                            indeterminate: true,
+                        });
+                        return false;
+                    }
+
+                    hasRecordedSourceLoadStarted = true;
+                    return true;
+                } finally {
+                    liveToRecordedTransitionInFlight = false;
+                }
+            };
+
+            const maybeTransitionLiveToRecorded = async () => {
+                if (!isLive || liveToRecordedTransitionInFlight || isAwaitingRecordedSourceReady) {
+                    return;
+                }
+
+                const liveStatusUrl = recordedPlaybackTranscodeStatusUrl || recordingTranscodeStatusUrl;
+                if (!liveStatusUrl) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch(liveStatusUrl, {
+                        cache: 'no-store',
+                        headers: {
+                            'X-Requested-With': 'vstreamware-live-transition-status',
+                        },
+                    });
+                    if (!response.ok) {
+                        throw new Error(`status ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    if (Boolean(payload.is_live_source)) {
+                        return;
+                    }
+
+                    await transitionLivePlaybackToRecorded({
+                        resumePlayback: !player.paused,
+                    });
+                } catch (_error) {
+                    // Keep live playback active on transient status lookup failures.
+                }
+            };
+
             const maybeAutoRefreshLive = () => {
-                if (inDvrMode || liveRefreshInFlight) {
+                if (!isLive || inDvrMode || liveRefreshInFlight || liveToRecordedTransitionInFlight) {
                     return;
                 }
 
@@ -3612,6 +3747,10 @@
                         maybeAutoRefreshLive();
                     }
                 }, livePullCheckIntervalMs);
+
+                window.setInterval(() => {
+                    void maybeTransitionLiveToRecorded();
+                }, livePullCheckIntervalMs);
             }
 
             if (liveModeToggleButton) {
@@ -3633,6 +3772,10 @@
             }
 
             const runRefreshAction = () => {
+                if (!isLive) {
+                    return;
+                }
+
                 if (snapshotRefreshButton) {
                     snapshotRefreshButton.disabled = true;
                 }
@@ -3664,7 +3807,7 @@
                 });
 
                 liveBufferSlider.addEventListener('change', () => {
-                    if (!inDvrMode) {
+                    if (isLive && !inDvrMode) {
                         seekNearNewestBuffered(liveOffsetSeconds);
                         maybeAutoRefreshLive();
                     }
@@ -3681,7 +3824,7 @@
                         highlightDefaultedInput(liveBufferInput);
                         updateModeControls();
 
-                        if (seekWhenLive && !inDvrMode) {
+                        if (seekWhenLive && isLive && !inDvrMode) {
                             seekNearNewestBuffered(liveOffsetSeconds);
                             maybeAutoRefreshLive();
                         }
@@ -3699,7 +3842,7 @@
                     setLiveOffsetSeconds(parsed);
                     updateModeControls();
 
-                    if (seekWhenLive && !inDvrMode) {
+                    if (seekWhenLive && isLive && !inDvrMode) {
                         seekNearNewestBuffered(liveOffsetSeconds);
                         maybeAutoRefreshLive();
                     }

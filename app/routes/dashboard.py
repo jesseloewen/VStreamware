@@ -1419,6 +1419,9 @@ def recording_media(recording_path: str) -> object:
 
 @dashboard_bp.get("/recordings/transcode-status/<path:recording_path>")
 def recording_transcode_status(recording_path: str) -> object:
+    playback_mode = str(request.args.get("mode", "")).strip().lower()
+    prefer_recorded_playback = playback_mode == "recorded"
+
     root = _recordings_root_path()
     requested_path = Path(recording_path)
     requested_suffix = requested_path.suffix.lower()
@@ -1443,6 +1446,8 @@ def recording_transcode_status(recording_path: str) -> object:
                     "progress_label": "Ready",
                     "source_size_bytes": source_size_bytes,
                     "cached_size_bytes": source_size_bytes,
+                    "is_live_source": False,
+                    "state": "ready",
                 }
             )
 
@@ -1466,12 +1471,28 @@ def recording_transcode_status(recording_path: str) -> object:
                 "progress_label": "Ready",
                 "source_size_bytes": source_size_bytes,
                 "cached_size_bytes": source_size_bytes,
+                "is_live_source": False,
+                "state": "ready",
             }
         )
 
     services = get_services(current_app)
     recording_manager = services["recording_manager"]
     if _is_live_recording_path(recording_manager, resolved_path):
+        if prefer_recorded_playback:
+            return jsonify(
+                {
+                    "available": False,
+                    "is_transcoding": False,
+                    "progress_percent": 0,
+                    "progress_label": "Live",
+                    "source_size_bytes": source_size_bytes,
+                    "cached_size_bytes": 0,
+                    "is_live_source": True,
+                    "state": "live_wait",
+                }
+            )
+
         return jsonify(
             {
                 "available": True,
@@ -1480,6 +1501,8 @@ def recording_transcode_status(recording_path: str) -> object:
                 "progress_label": "Live",
                 "source_size_bytes": source_size_bytes,
                 "cached_size_bytes": source_size_bytes,
+                "is_live_source": True,
+                "state": "live",
             }
         )
 
@@ -1500,6 +1523,8 @@ def recording_transcode_status(recording_path: str) -> object:
                 "progress_label": "Ready",
                 "source_size_bytes": source_size_bytes,
                 "cached_size_bytes": finalized_size_bytes,
+                "is_live_source": False,
+                "state": "ready",
             }
         )
 
@@ -1562,6 +1587,8 @@ def recording_transcode_status(recording_path: str) -> object:
             "progress_label": progress_label,
             "source_size_bytes": source_size_bytes,
             "cached_size_bytes": cached_size_bytes,
+            "is_live_source": False,
+            "state": state,
             "error": file_status.get("error") if state == "failed" else None,
         }
     )
