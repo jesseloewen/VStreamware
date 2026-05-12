@@ -287,6 +287,14 @@ def _transcode_output_lock(output_path: Path) -> threading.Lock:
     return lock
 
 
+def _is_transcode_output_locked(output_path: Path) -> bool:
+    cache_key = str(output_path.resolve())
+    with _TRANSCODE_LOCKS_GUARD:
+        lock = _TRANSCODE_LOCKS.get(cache_key)
+
+    return bool(lock is not None and lock.locked())
+
+
 def _live_buffer_bounds() -> tuple[int, int]:
     minimum = int(current_app.config.get("LIVE_BUFFER_MIN_SECONDS", 5) or 5)
     maximum = int(current_app.config.get("LIVE_BUFFER_MAX_SECONDS", 90) or 90)
@@ -406,6 +414,7 @@ def _recording_urls(relative_path: str) -> dict[str, str]:
         "thumbnail_url": url_for("dashboard.recording_thumbnail", recording_path=relative_path),
         "view_url": url_for("dashboard.view_recording", recording_slug=view_slug),
         "chat_url": url_for("dashboard.recording_chat", recording_path=relative_path),
+        "transcode_status_url": url_for("dashboard.recording_transcode_status", recording_path=relative_path),
     }
 
 
@@ -1311,6 +1320,94 @@ def recording_media(recording_path: str) -> object:
     else:
         response.headers["Cache-Control"] = "public, max-age=600"
     return response
+
+
+@dashboard_bp.get("/recordings/transcode-status/<path:recording_path>")
+def recording_transcode_status(recording_path: str) -> object:
+    root = _recordings_root_path()
+    resolved_path = _resolve_recording_path(root, recording_path)
+    if resolved_path is None or not resolved_path.exists() or not resolved_path.is_file():
+        abort(404)
+
+    suffix = resolved_path.suffix.lower()
+    source_size_bytes = 0
+    try:
+        source_size_bytes = int(resolved_path.stat().st_size)
+    except OSError:
+        source_size_bytes = 0
+
+    # Non-TS files are directly streamable and do not require a transcode wait state.
+    if suffix != ".ts":
+        return jsonify(
+            {
+                "available": True,
+                "is_transcoding": False,
+                "progress_percent": 100,
+                "progress_label": "Ready",
+                "source_size_bytes": source_size_bytes,
+                "cached_size_bytes": source_size_bytes,
+            }
+        )
+
+    services = get_services(current_app)
+    recording_manager = services["recording_manager"]
+    if _is_live_recording_path(recording_manager, resolved_path):
+        return jsonify(
+            {
+                "available": True,
+                "is_transcoding": False,
+                "progress_percent": 100,
+                "progress_label": "Live",
+                "source_size_bytes": source_size_bytes,
+                "cached_size_bytes": source_size_bytes,
+            }
+        )
+
+    try:
+        cache_path = _video_cache_path(root, resolved_path)
+    except (OSError, ValueError):
+        cache_path = None
+
+    cached_size_bytes = 0
+    is_cached_ready = False
+    is_transcoding = False
+
+    if cache_path is not None:
+        try:
+            if cache_path.exists() and cache_path.is_file():
+                cached_size_bytes = int(cache_path.stat().st_size)
+                is_cached_ready = cached_size_bytes > 0
+        except OSError:
+            cached_size_bytes = 0
+            is_cached_ready = False
+
+        is_transcoding = _is_transcode_output_locked(cache_path)
+
+    progress_percent = 0
+    if is_cached_ready and not is_transcoding:
+        progress_percent = 100
+    elif source_size_bytes > 0 and cached_size_bytes > 0:
+        progress_percent = max(1, min(99, int((cached_size_bytes / source_size_bytes) * 100)))
+    elif is_transcoding:
+        progress_percent = 1
+
+    if is_cached_ready and not is_transcoding:
+        progress_label = "Ready"
+    elif is_transcoding:
+        progress_label = "Transcoding"
+    else:
+        progress_label = "Preparing"
+
+    return jsonify(
+        {
+            "available": bool(is_cached_ready and not is_transcoding),
+            "is_transcoding": bool(is_transcoding),
+            "progress_percent": progress_percent,
+            "progress_label": progress_label,
+            "source_size_bytes": source_size_bytes,
+            "cached_size_bytes": cached_size_bytes,
+        }
+    )
 
 
 @dashboard_bp.get("/recordings/chat/<path:recording_path>")

@@ -90,6 +90,16 @@
                                 <div class="video-detail-player-wrap" id="video-player-shell">
                                     <div class="video-player-stage" id="video-player-stage">
                                         <video id="detail-video" preload="{{ 'auto' if recording.is_live else 'metadata' }}" data-media-url="{{ recording.media_url }}"{% if recording.is_live %} playsinline{% endif %}></video>
+                                        <div id="video-transcode-overlay" class="video-transcode-overlay" hidden role="status" aria-live="polite" aria-atomic="true">
+                                            <div class="video-transcode-card">
+                                                <p id="video-transcode-title" class="video-transcode-title">Preparing video...</p>
+                                                <p id="video-transcode-message" class="video-transcode-message">Loading recording stream.</p>
+                                                <div class="video-transcode-progress-track" aria-hidden="true">
+                                                    <span id="video-transcode-progress-bar" class="video-transcode-progress-bar"></span>
+                                                </div>
+                                                <p id="video-transcode-progress-label" class="video-transcode-progress-label">0%</p>
+                                            </div>
+                                        </div>
                                         <div class="video-center-toggle-anchor" id="center-toggle-anchor" aria-hidden="true"></div>
                                         <div class="video-gesture-layer" id="video-gesture-layer" aria-live="polite" aria-atomic="true">
                                             <span class="video-gesture-hint is-back" id="video-gesture-back" hidden>-10s</span>
@@ -311,6 +321,11 @@
             const chatSyncMode = document.getElementById('chat-sync-mode');
             const chatSyncSourceToggle = document.getElementById('chat-sync-source-toggle');
             const chatSyncSourceLabel = document.getElementById('chat-sync-source-label');
+            const transcodeOverlay = document.getElementById('video-transcode-overlay');
+            const transcodeOverlayTitle = document.getElementById('video-transcode-title');
+            const transcodeOverlayMessage = document.getElementById('video-transcode-message');
+            const transcodeOverlayProgressBar = document.getElementById('video-transcode-progress-bar');
+            const transcodeOverlayProgressLabel = document.getElementById('video-transcode-progress-label');
             const videoSizeIndicator = document.getElementById('video-size-indicator');
             const videoDetailContent = document.querySelector('.video-detail-content');
             const videoPlayerWrap = document.querySelector('.video-detail-player-wrap');
@@ -324,6 +339,7 @@
             const isLive = {{ 'true' if recording.is_live else 'false' }};
             const chatUrl = {{ recording.chat_url | tojson }};
             const recordingSizeUrl = {{ url_for('dashboard.recording_size', recording_slug=recording.view_slug) | tojson }};
+            const recordingTranscodeStatusUrl = {{ recording.transcode_status_url | tojson }};
             const releaseTranscodeUrl = {{ url_for('dashboard.release_transcode_cache') | tojson }};
             let recordingStartUtcMs = {{ recording.recording_start_utc_ms if recording.recording_start_utc_ms is not none else 'null' }};
             const liveOffsetSecondsDefault = {{ live_buffer_default_seconds }};
@@ -2409,6 +2425,11 @@
             let lastAutoDvrRefreshAt = 0;
             let lastProgressAt = Date.now();
             let lastProgressTime = 0;
+            let transcodePollTimer = null;
+            let transcodeStatusInFlight = false;
+            let isAwaitingRecordedSourceReady = false;
+
+            const recordedTranscodePollMs = 900;
 
             setChatSyncSource(readPersistedChatSyncSource(), false);
 
@@ -2462,6 +2483,130 @@
                 const timePart = Date.now().toString(36);
                 const randomPart = Math.random().toString(36).slice(2, 10);
                 return `${timePart}_${randomPart}`;
+            };
+
+            const setTranscodeOverlayVisible = (visible) => {
+                if (!transcodeOverlay) {
+                    return;
+                }
+
+                transcodeOverlay.hidden = !visible;
+                transcodeOverlay.classList.toggle('is-visible', visible);
+            };
+
+            const setTranscodeOverlayState = (options = {}) => {
+                const title = typeof options.title === 'string' ? options.title : 'Preparing video...';
+                const message = typeof options.message === 'string' ? options.message : 'Loading recording stream.';
+                const percentValue = Number.isFinite(options.percent) ? Math.max(0, Math.min(100, Math.round(options.percent))) : 0;
+                const indeterminate = Boolean(options.indeterminate);
+                const visible = Boolean(options.visible);
+
+                if (transcodeOverlayTitle) {
+                    transcodeOverlayTitle.textContent = title;
+                }
+
+                if (transcodeOverlayMessage) {
+                    transcodeOverlayMessage.textContent = message;
+                }
+
+                if (transcodeOverlayProgressBar) {
+                    transcodeOverlayProgressBar.classList.toggle('is-indeterminate', indeterminate);
+                    transcodeOverlayProgressBar.style.width = indeterminate ? '38%' : `${percentValue}%`;
+                }
+
+                if (transcodeOverlayProgressLabel) {
+                    transcodeOverlayProgressLabel.textContent = indeterminate ? 'Working...' : `${percentValue}%`;
+                }
+
+                setTranscodeOverlayVisible(visible);
+            };
+
+            const stopRecordedTranscodePolling = () => {
+                if (transcodePollTimer !== null) {
+                    window.clearInterval(transcodePollTimer);
+                    transcodePollTimer = null;
+                }
+            };
+
+            const syncRecordedTranscodeOverlay = async (force = false) => {
+                if (isLive || !recordingTranscodeStatusUrl || !isAwaitingRecordedSourceReady) {
+                    return;
+                }
+
+                if (!force && transcodeStatusInFlight) {
+                    return;
+                }
+
+                transcodeStatusInFlight = true;
+                try {
+                    const response = await fetch(recordingTranscodeStatusUrl, {
+                        cache: 'no-store',
+                        headers: {
+                            'X-Requested-With': 'vstreamware-transcode-status',
+                        },
+                    });
+                    if (!response.ok) {
+                        throw new Error(`status ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    const available = Boolean(payload.available);
+                    const isTranscoding = Boolean(payload.is_transcoding);
+                    const progressPercentRaw = Number(payload.progress_percent);
+                    const progressPercent = Number.isFinite(progressPercentRaw)
+                        ? Math.max(0, Math.min(100, progressPercentRaw))
+                        : 0;
+
+                    if (available && !isTranscoding) {
+                        setTranscodeOverlayVisible(false);
+                        return;
+                    }
+
+                    if (isTranscoding) {
+                        setTranscodeOverlayState({
+                            visible: true,
+                            title: 'Transcoding video...',
+                            message: 'Preparing browser-friendly playback. You can start watching as soon as this finishes.',
+                            percent: progressPercent,
+                            indeterminate: progressPercent <= 0,
+                        });
+                        return;
+                    }
+
+                    setTranscodeOverlayState({
+                        visible: true,
+                        title: 'Preparing video...',
+                        message: 'Waiting for transcode to start.',
+                        percent: 0,
+                        indeterminate: true,
+                    });
+                } catch (_error) {
+                    setTranscodeOverlayState({
+                        visible: true,
+                        title: 'Preparing video...',
+                        message: 'Checking transcoder status...',
+                        percent: 0,
+                        indeterminate: true,
+                    });
+                } finally {
+                    transcodeStatusInFlight = false;
+                }
+            };
+
+            const startRecordedTranscodePolling = () => {
+                if (isLive || !recordingTranscodeStatusUrl || !isAwaitingRecordedSourceReady) {
+                    return;
+                }
+
+                if (transcodePollTimer !== null) {
+                    return;
+                }
+
+                transcodePollTimer = window.setInterval(() => {
+                    void syncRecordedTranscodeOverlay();
+                }, recordedTranscodePollMs);
+
+                void syncRecordedTranscodeOverlay(true);
             };
 
             const releaseTransientTranscode = (transientCacheId, options = {}) => {
@@ -2580,6 +2725,10 @@
                 currentTranscodeCacheId = nextTranscodeCacheId;
 
                 const wasPaused = player.paused;
+                if (!isLive) {
+                    isAwaitingRecordedSourceReady = true;
+                    startRecordedTranscodePolling();
+                }
                 player.src = sourceUrl;
                 player.load();
 
@@ -2588,6 +2737,12 @@
                 }
 
                 const handleReady = () => {
+                    if (!isLive) {
+                        isAwaitingRecordedSourceReady = false;
+                        stopRecordedTranscodePolling();
+                        setTranscodeOverlayVisible(false);
+                    }
+
                     if (typeof onReady === 'function') {
                         onReady(wasPaused);
                     }
@@ -3243,6 +3398,26 @@
             player.addEventListener('loadedmetadata', () => {
                 syncPlaybackSpeedForMode();
                 updateCustomPlayerUi();
+                if (!isLive) {
+                    isAwaitingRecordedSourceReady = false;
+                    stopRecordedTranscodePolling();
+                    setTranscodeOverlayVisible(false);
+                }
+            });
+
+            player.addEventListener('error', () => {
+                if (isLive || !isAwaitingRecordedSourceReady) {
+                    return;
+                }
+
+                stopRecordedTranscodePolling();
+                setTranscodeOverlayState({
+                    visible: true,
+                    title: 'Unable to load video',
+                    message: 'Transcoding failed or the recording is currently unavailable.',
+                    percent: 0,
+                    indeterminate: true,
+                });
             });
 
             for (const button of playbackSpeedButtons) {
@@ -3464,6 +3639,7 @@
             }
 
             window.addEventListener('beforeunload', stopChatPolling);
+            window.addEventListener('beforeunload', stopRecordedTranscodePolling);
             window.addEventListener('beforeunload', deactivateHoldBoost);
             window.addEventListener('beforeunload', stopSideChatResize);
             window.addEventListener('beforeunload', () => {
