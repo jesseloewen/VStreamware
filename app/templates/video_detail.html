@@ -344,7 +344,7 @@
             const chatUrl = {{ recording.chat_url | tojson }};
             const recordingSizeUrl = {{ url_for('dashboard.recording_size', recording_slug=recording.view_slug) | tojson }};
             const recordingTranscodeStatusUrl = {{ recording.transcode_status_url | tojson }};
-            const buildRecordedPlaybackStatusUrl = (rawUrl) => {
+            const buildUrlWithParams = (rawUrl, params = {}) => {
                 const baseUrl = String(rawUrl || '').trim();
                 if (!baseUrl) {
                     return '';
@@ -352,12 +352,37 @@
 
                 try {
                     const parsed = new URL(baseUrl, window.location.href);
-                    parsed.searchParams.set('mode', 'recorded');
+                    for (const [key, rawValue] of Object.entries(params)) {
+                        const value = String(rawValue || '').trim();
+                        if (value) {
+                            parsed.searchParams.set(key, value);
+                        } else {
+                            parsed.searchParams.delete(key);
+                        }
+                    }
+
                     return parsed.toString();
                 } catch (_error) {
-                    const separator = baseUrl.includes('?') ? '&' : '?';
-                    return `${baseUrl}${separator}mode=recorded`;
+                    let nextUrl = baseUrl;
+                    for (const [key, rawValue] of Object.entries(params)) {
+                        const value = String(rawValue || '').trim();
+                        const encodedKey = encodeURIComponent(key);
+                        const encodedValue = encodeURIComponent(value);
+                        const pattern = new RegExp(`([?&])${encodedKey}=[^&]*`, 'g');
+                        nextUrl = nextUrl.replace(pattern, '$1').replace(/[?&]$/, '');
+                        if (!value) {
+                            continue;
+                        }
+
+                        const separator = nextUrl.includes('?') ? '&' : '?';
+                        nextUrl = `${nextUrl}${separator}${encodedKey}=${encodedValue}`;
+                    }
+
+                    return nextUrl;
                 }
+            };
+            const buildRecordedPlaybackStatusUrl = (rawUrl) => {
+                return buildUrlWithParams(rawUrl, { mode: 'recorded' });
             };
             const recordedPlaybackTranscodeStatusUrl = buildRecordedPlaybackStatusUrl(recordingTranscodeStatusUrl);
             const releaseTranscodeUrl = {{ url_for('dashboard.release_transcode_cache') | tojson }};
@@ -2448,8 +2473,12 @@
             let transcodePollTimer = null;
             let transcodeStatusInFlight = false;
             let isAwaitingRecordedSourceReady = false;
+            let isAwaitingLiveDvrSourceReady = false;
             let hasRecordedSourceLoadStarted = false;
             let liveToRecordedTransitionInFlight = false;
+            let activeLiveDvrTransientId = '';
+            let activeLiveDvrKey = '';
+            let sourceLoadGeneration = 0;
 
             const recordedTranscodePollMs = 900;
 
@@ -2461,12 +2490,41 @@
                 player.style.visibility = visible ? 'visible' : 'hidden';
             };
 
+            const isAwaitingAnySourceReady = () => (
+                Boolean(isAwaitingRecordedSourceReady || isAwaitingLiveDvrSourceReady)
+            );
+
+            const clearLiveDvrAwaitState = () => {
+                isAwaitingLiveDvrSourceReady = false;
+                activeLiveDvrTransientId = '';
+                activeLiveDvrKey = '';
+                if (!isAwaitingRecordedSourceReady) {
+                    stopRecordedTranscodePolling();
+                    setTranscodeOverlayVisible(false);
+                }
+            };
+
             const getActiveTranscodeStatusUrl = () => {
-                if (isLive || liveToRecordedTransitionInFlight) {
-                    return recordedPlaybackTranscodeStatusUrl || recordingTranscodeStatusUrl;
+                const baseStatusUrl = (isLive || liveToRecordedTransitionInFlight)
+                    ? (recordedPlaybackTranscodeStatusUrl || recordingTranscodeStatusUrl)
+                    : recordingTranscodeStatusUrl;
+
+                if (!baseStatusUrl) {
+                    return '';
                 }
 
-                return recordingTranscodeStatusUrl;
+                if (isAwaitingLiveDvrSourceReady && activeLiveDvrTransientId && activeLiveDvrKey) {
+                    return buildUrlWithParams(baseStatusUrl, {
+                        transient_id: activeLiveDvrTransientId,
+                        live_dvr: activeLiveDvrKey,
+                    });
+                }
+
+                if (isLive || liveToRecordedTransitionInFlight) {
+                    return baseStatusUrl;
+                }
+
+                return baseStatusUrl;
             };
 
             setChatSyncSource(readPersistedChatSyncSource(), false);
@@ -2568,7 +2626,7 @@
 
             const syncRecordedTranscodeOverlay = async (force = false) => {
                 const activeStatusUrl = getActiveTranscodeStatusUrl();
-                if (isLive || !activeStatusUrl || !isAwaitingRecordedSourceReady) {
+                if (!activeStatusUrl || !isAwaitingAnySourceReady()) {
                     return 'idle';
                 }
 
@@ -2597,9 +2655,13 @@
                     const progressPercent = Number.isFinite(progressPercentRaw)
                         ? Math.max(0, Math.min(100, progressPercentRaw))
                         : 0;
+                    const awaitingLiveDvr = Boolean(isAwaitingLiveDvrSourceReady);
 
                     if (available && !isTranscoding) {
                         isAwaitingRecordedSourceReady = false;
+                        isAwaitingLiveDvrSourceReady = false;
+                        activeLiveDvrTransientId = '';
+                        activeLiveDvrKey = '';
                         stopRecordedTranscodePolling();
                         setTranscodeOverlayVisible(false);
                         return 'ready';
@@ -2607,6 +2669,9 @@
 
                     if (progressLabel === 'failed') {
                         isAwaitingRecordedSourceReady = false;
+                        isAwaitingLiveDvrSourceReady = false;
+                        activeLiveDvrTransientId = '';
+                        activeLiveDvrKey = '';
                         stopRecordedTranscodePolling();
                         setTranscodeOverlayState({
                             visible: true,
@@ -2622,7 +2687,9 @@
                         setTranscodeOverlayState({
                             visible: true,
                             title: 'Preparing full video...',
-                            message: 'Building seekable MP4 playback. Video will load when ready.',
+                            message: awaitingLiveDvr
+                                ? 'Creating temporary DVR playback from the live recording. Video will load when ready.'
+                                : 'Building seekable MP4 playback. Video will load when ready.',
                             percent: progressPercent,
                             indeterminate: progressPercent <= 0,
                         });
@@ -2631,8 +2698,10 @@
 
                     setTranscodeOverlayState({
                         visible: true,
-                        title: 'Queueing video...',
-                        message: 'Waiting for background transcoder to pick up this recording.',
+                        title: awaitingLiveDvr ? 'Preparing DVR snapshot...' : 'Queueing video...',
+                        message: awaitingLiveDvr
+                            ? 'Waiting for temporary transcode startup.'
+                            : 'Waiting for background transcoder to pick up this recording.',
                         percent: 0,
                         indeterminate: true,
                     });
@@ -2685,7 +2754,7 @@
             };
 
             const startRecordedTranscodePolling = () => {
-                if (isLive || !getActiveTranscodeStatusUrl() || !isAwaitingRecordedSourceReady) {
+                if (!getActiveTranscodeStatusUrl() || !isAwaitingAnySourceReady()) {
                     return;
                 }
 
@@ -2738,6 +2807,7 @@
                 return {
                     url: mediaBaseUrl,
                     transientCacheId: '',
+                    loadKind: 'recorded',
                 };
             };
 
@@ -2778,18 +2848,22 @@
 
             const buildLiveDvrSource = () => {
                 const transientCacheId = createTransientCacheId();
+                const dvrKey = createLiveDvrKey();
                 return {
                     url: buildLiveMediaUrl({
-                        dvrKey: createLiveDvrKey(),
+                        dvrKey,
                         transientCacheId,
                     }),
                     transientCacheId,
+                    dvrKey,
+                    loadKind: 'live-dvr',
                 };
             };
 
             const buildDirectLiveSource = () => ({
                 url: buildLiveMediaUrl(),
                 transientCacheId: '',
+                loadKind: 'live-direct',
             });
 
             const calculateSmoothBufferSeconds = () => {
@@ -2800,21 +2874,29 @@
             const loadSource = (source, onReady) => {
                 let sourceUrl = '';
                 let nextTranscodeCacheId = '';
+                let nextLiveDvrKey = '';
+                let loadKind = '';
 
                 if (typeof source === 'string') {
                     sourceUrl = source;
                 } else if (source && typeof source === 'object') {
                     sourceUrl = String(source.url || '');
                     nextTranscodeCacheId = String(source.transientCacheId || '').trim();
+                    nextLiveDvrKey = String(source.dvrKey || '').trim();
+                    loadKind = String(source.loadKind || '').trim().toLowerCase();
                 }
 
                 if (!sourceUrl) {
                     return false;
                 }
 
+                sourceLoadGeneration += 1;
+                const loadGeneration = sourceLoadGeneration;
+
                 const previousTranscodeCacheId = currentTranscodeCacheId;
                 currentTranscodeCacheId = nextTranscodeCacheId;
 
+                const shouldFinalizeRecordedOnReady = !isLive;
                 const wasPaused = player.paused;
                 player.src = sourceUrl;
                 player.load();
@@ -2824,7 +2906,20 @@
                 }
 
                 const handleReady = () => {
-                    if (!isLive) {
+                    if (loadGeneration !== sourceLoadGeneration) {
+                        return;
+                    }
+
+                    if (
+                        loadKind === 'live-dvr'
+                        && isAwaitingLiveDvrSourceReady
+                        && activeLiveDvrTransientId === nextTranscodeCacheId
+                        && activeLiveDvrKey === nextLiveDvrKey
+                    ) {
+                        clearLiveDvrAwaitState();
+                    }
+
+                    if (shouldFinalizeRecordedOnReady) {
                         hasRecordedSourceLoadStarted = true;
                         isAwaitingRecordedSourceReady = false;
                         stopRecordedTranscodePolling();
@@ -3289,6 +3384,7 @@
                     return;
                 }
 
+                clearLiveDvrAwaitState();
                 inDvrMode = false;
                 const loaded = loadSource(buildDirectLiveSource(), () => {
                     startNearLiveEdge(jumpClosestToLiveEdge ? calculateSmoothBufferSeconds() : liveOffsetSeconds);
@@ -3316,6 +3412,20 @@
                 const forcePlay = Boolean(options.forcePlay);
                 const autoReturnToLiveOnCatchUp = Boolean(options.autoReturnToLiveOnCatchUp);
                 inDvrMode = true;
+                activeLiveDvrTransientId = String(dvrSource.transientCacheId || '').trim();
+                activeLiveDvrKey = String(dvrSource.dvrKey || '').trim();
+                isAwaitingLiveDvrSourceReady = Boolean(activeLiveDvrTransientId && activeLiveDvrKey);
+                if (isAwaitingLiveDvrSourceReady) {
+                    setTranscodeOverlayState({
+                        visible: true,
+                        title: 'Preparing full video...',
+                        message: 'Creating temporary DVR playback from the live recording.',
+                        percent: 0,
+                        indeterminate: true,
+                    });
+                    startRecordedTranscodePolling();
+                }
+
                 const desiredTime = Number.isFinite(targetTime) ? Math.max(targetTime, 0) : Math.max(player.currentTime, 0);
                 const loaded = loadSource(dvrSource, (wasPaused) => {
                     try {
@@ -3341,6 +3451,7 @@
                 });
 
                 if (!loaded) {
+                    clearLiveDvrAwaitState();
                     inDvrMode = false;
                     updateModeControls();
                 }
@@ -3356,9 +3467,11 @@
                 const preservedTime = Number.isFinite(player.currentTime) ? Math.max(player.currentTime, 0) : 0;
 
                 try {
+                    clearLiveDvrAwaitState();
                     inDvrMode = false;
                     isLive = false;
                     liveRefreshInFlight = false;
+                    hasRecordedSourceLoadStarted = false;
 
                     updateModeControls();
 
@@ -3406,7 +3519,7 @@
             };
 
             const maybeTransitionLiveToRecorded = async () => {
-                if (!isLive || liveToRecordedTransitionInFlight || isAwaitingRecordedSourceReady) {
+                if (!isLive || liveToRecordedTransitionInFlight || isAwaitingAnySourceReady()) {
                     return;
                 }
 
@@ -3615,7 +3728,7 @@
             player.addEventListener('loadedmetadata', () => {
                 syncPlaybackSpeedForMode();
                 updateCustomPlayerUi();
-                if (!isLive) {
+                if (!isLive && hasRecordedSourceLoadStarted && !isAwaitingRecordedSourceReady) {
                     isAwaitingRecordedSourceReady = false;
                     stopRecordedTranscodePolling();
                     setTranscodeOverlayVisible(false);

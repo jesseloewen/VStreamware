@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -58,6 +59,8 @@ _LIVE_DVR_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
 _TRANSIENT_CACHE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,96}$")
 _TRANSCODE_LOCKS_GUARD = threading.Lock()
 _TRANSCODE_LOCKS: dict[str, threading.Lock] = {}
+_TRANSIENT_TRANSCODE_JOBS_GUARD = threading.Lock()
+_TRANSIENT_TRANSCODE_JOBS: dict[str, dict[str, object]] = {}
 
 try:
     import imageio_ffmpeg  # type: ignore[import-not-found]
@@ -285,6 +288,225 @@ def _is_transcode_output_locked(output_path: Path) -> bool:
         lock = _TRANSCODE_LOCKS.get(cache_key)
 
     return bool(lock is not None and lock.locked())
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _safe_file_size(path: Path) -> int:
+    try:
+        if path.exists() and path.is_file():
+            return int(path.stat().st_size)
+    except OSError:
+        return 0
+
+    return 0
+
+
+def _estimate_progress_percent(source_size_bytes: int, output_size_bytes: int) -> int:
+    if source_size_bytes <= 0:
+        return 1 if output_size_bytes > 0 else 0
+
+    if output_size_bytes <= 0:
+        return 0
+
+    return max(1, min(99, int((output_size_bytes / source_size_bytes) * 100)))
+
+
+def _transient_transcode_key(output_path: Path) -> str:
+    try:
+        return str(output_path.resolve())
+    except OSError:
+        return str(output_path)
+
+
+def _register_transient_transcode_job(
+    source_path: Path,
+    output_path: Path,
+    transient_cache_id: str | None = None,
+    live_dvr_key: str | None = None,
+) -> None:
+    source_size_bytes = _safe_file_size(source_path)
+    job_key = _transient_transcode_key(output_path)
+
+    with _TRANSIENT_TRANSCODE_JOBS_GUARD:
+        _TRANSIENT_TRANSCODE_JOBS[job_key] = {
+            "source_path": source_path,
+            "output_path": output_path,
+            "source_size_bytes": source_size_bytes,
+            "transient_cache_id": transient_cache_id or "",
+            "live_dvr_key": live_dvr_key or "",
+            "started_at": _utc_now_iso(),
+            "cancel_requested": False,
+            "process": None,
+        }
+
+
+def _unregister_transient_transcode_job(output_path: Path) -> None:
+    job_key = _transient_transcode_key(output_path)
+    with _TRANSIENT_TRANSCODE_JOBS_GUARD:
+        _TRANSIENT_TRANSCODE_JOBS.pop(job_key, None)
+
+
+def _set_transient_transcode_process(output_path: Path, process: subprocess.Popen[bytes] | None) -> None:
+    job_key = _transient_transcode_key(output_path)
+    with _TRANSIENT_TRANSCODE_JOBS_GUARD:
+        job = _TRANSIENT_TRANSCODE_JOBS.get(job_key)
+        if isinstance(job, dict):
+            job["process"] = process
+
+
+def _is_transient_transcode_cancel_requested(output_path: Path) -> bool:
+    job_key = _transient_transcode_key(output_path)
+    with _TRANSIENT_TRANSCODE_JOBS_GUARD:
+        job = _TRANSIENT_TRANSCODE_JOBS.get(job_key)
+        if not isinstance(job, dict):
+            return False
+
+        return bool(job.get("cancel_requested"))
+
+
+def _terminate_subprocess(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is not None:
+        return
+
+    try:
+        process.terminate()
+    except OSError:
+        pass
+
+    try:
+        process.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+        except OSError:
+            pass
+
+        try:
+            process.wait(timeout=2)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+
+def _request_cancel_transient_jobs(transient_cache_id: str) -> int:
+    if not transient_cache_id:
+        return 0
+
+    active_processes: list[subprocess.Popen[bytes]] = []
+    with _TRANSIENT_TRANSCODE_JOBS_GUARD:
+        for job in _TRANSIENT_TRANSCODE_JOBS.values():
+            if not isinstance(job, dict):
+                continue
+
+            if str(job.get("transient_cache_id", "")).strip() != transient_cache_id:
+                continue
+
+            job["cancel_requested"] = True
+            process = job.get("process")
+            if isinstance(process, subprocess.Popen):
+                active_processes.append(process)
+
+    for process in active_processes:
+        _terminate_subprocess(process)
+
+    return len(active_processes)
+
+
+def _snapshot_active_transient_transcode(root: Path) -> dict[str, object] | None:
+    with _TRANSIENT_TRANSCODE_JOBS_GUARD:
+        jobs = list(_TRANSIENT_TRANSCODE_JOBS.values())
+
+    active_job: dict[str, object] | None = None
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+
+        output_path = job.get("output_path")
+        source_path = job.get("source_path")
+        if not isinstance(output_path, Path) or not isinstance(source_path, Path):
+            continue
+
+        if not _is_transcode_output_locked(output_path):
+            continue
+
+        active_job = job
+
+    if active_job is None:
+        return None
+
+    source_path = active_job["source_path"]
+    output_path = active_job["output_path"]
+
+    source_size_bytes = int(active_job.get("source_size_bytes", 0) or 0)
+    if source_size_bytes <= 0:
+        source_size_bytes = _safe_file_size(source_path)
+
+    output_size_bytes = _safe_file_size(output_path)
+    progress_percent = _estimate_progress_percent(source_size_bytes, output_size_bytes)
+
+    try:
+        relative_path = source_path.resolve().relative_to(root).as_posix()
+    except (OSError, ValueError):
+        relative_path = source_path.name
+
+    return {
+        "relative_path": relative_path,
+        "file_name": source_path.name,
+        "progress_percent": progress_percent,
+        "started_at": str(active_job.get("started_at", "") or ""),
+        "source_size_bytes": max(source_size_bytes, 0),
+        "output_size_bytes": max(output_size_bytes, 0),
+        "kind": "live_dvr_transient",
+    }
+
+
+def _build_live_dvr_transcode_status(output_path: Path, source_size_bytes: int) -> dict[str, object]:
+    source_size = max(int(source_size_bytes), 0)
+    cached_size_bytes = _safe_file_size(output_path)
+    is_locked = _is_transcode_output_locked(output_path)
+
+    if cached_size_bytes > 0 and not is_locked:
+        return {
+            "available": True,
+            "is_transcoding": False,
+            "progress_percent": 100,
+            "progress_label": "Ready",
+            "source_size_bytes": source_size,
+            "cached_size_bytes": cached_size_bytes,
+            "is_live_source": True,
+            "state": "ready",
+            "error": None,
+        }
+
+    if is_locked:
+        progress_percent = _estimate_progress_percent(source_size, cached_size_bytes)
+        return {
+            "available": False,
+            "is_transcoding": True,
+            "progress_percent": progress_percent,
+            "progress_label": "Transcoding",
+            "source_size_bytes": source_size,
+            "cached_size_bytes": cached_size_bytes,
+            "is_live_source": True,
+            "state": "transcoding",
+            "error": None,
+        }
+
+    # If a DVR request was created but ffmpeg has not yet locked the output path,
+    # keep the UI in a waiting state so the overlay remains visible.
+    return {
+        "available": False,
+        "is_transcoding": False,
+        "progress_percent": 0,
+        "progress_label": "Queued",
+        "source_size_bytes": source_size,
+        "cached_size_bytes": cached_size_bytes,
+        "is_live_source": True,
+        "state": "queued",
+        "error": None,
+    }
 
 
 def _live_buffer_bounds() -> tuple[int, int]:
@@ -532,7 +754,11 @@ def _is_live_recording_path(recording_manager: Any, file_path: Path) -> bool:
     return False
 
 
-def _materialize_ts_mp4_file(ts_path: Path, output_path: Path | None = None) -> Path | None:
+def _materialize_ts_mp4_file(
+    ts_path: Path,
+    output_path: Path | None = None,
+    transient_cache_id: str | None = None,
+) -> Path | None:
     ffmpeg_binary = _resolve_ffmpeg_binary()
     if ffmpeg_binary is None:
         return None
@@ -541,9 +767,22 @@ def _materialize_ts_mp4_file(ts_path: Path, output_path: Path | None = None) -> 
         return None
 
     cache_path = output_path
+    cancellation_enabled = bool(
+        transient_cache_id
+        and _is_valid_transient_cache_id(str(transient_cache_id).strip())
+    )
 
     transcode_lock = _transcode_output_lock(cache_path)
     with transcode_lock:
+        if cancellation_enabled and _is_transient_transcode_cancel_requested(cache_path):
+            try:
+                if cache_path.exists():
+                    cache_path.unlink()
+            except OSError:
+                pass
+
+            return None
+
         if cache_path.exists() and cache_path.stat().st_size > 0:
             return cache_path
 
@@ -588,19 +827,70 @@ def _materialize_ts_mp4_file(ts_path: Path, output_path: Path | None = None) -> 
         ]
 
         for command in command_candidates:
+            if cancellation_enabled and _is_transient_transcode_cancel_requested(cache_path):
+                break
+
             try:
-                result = subprocess.run(
+                if cache_path.exists():
+                    cache_path.unlink()
+            except OSError:
+                pass
+
+            try:
+                process = subprocess.Popen(
                     command,
-                    capture_output=True,
-                    text=True,
-                    timeout=60 * 30,
-                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    bufsize=0,
                 )
-            except (OSError, subprocess.TimeoutExpired):
+            except OSError:
                 continue
 
-            if result.returncode == 0 and cache_path.exists() and cache_path.stat().st_size > 0:
+            _set_transient_transcode_process(cache_path, process)
+            try:
+                started_at = time.monotonic()
+                command_timed_out = False
+                command_cancelled = False
+                while True:
+                    return_code = process.poll()
+                    if return_code is not None:
+                        break
+
+                    if cancellation_enabled and _is_transient_transcode_cancel_requested(cache_path):
+                        command_cancelled = True
+                        _terminate_subprocess(process)
+                        break
+
+                    if (time.monotonic() - started_at) >= (60 * 30):
+                        command_timed_out = True
+                        _terminate_subprocess(process)
+                        break
+
+                    time.sleep(0.25)
+
+                if command_cancelled:
+                    break
+
+                if command_timed_out:
+                    continue
+
+                if process.returncode != 0:
+                    continue
+
+            except OSError:
+                continue
+            finally:
+                _set_transient_transcode_process(cache_path, None)
+
+            if cache_path.exists() and cache_path.stat().st_size > 0:
                 return cache_path
+
+        if cancellation_enabled and _is_transient_transcode_cancel_requested(cache_path):
+            try:
+                if cache_path.exists():
+                    cache_path.unlink()
+            except OSError:
+                pass
 
     return None
 
@@ -1121,6 +1411,7 @@ def status() -> object:
 def transcode_queue_status() -> object:
     services = get_services(current_app)
     transcode_queue = services.get("transcode_queue")
+    recordings_root = _recordings_root_path()
     snapshot = {
         "running": False,
         "is_working": False,
@@ -1139,6 +1430,26 @@ def transcode_queue_status() -> object:
                 snapshot = payload
         except Exception:
             pass
+
+    active_job = snapshot.get("active")
+    has_persistent_active_job = isinstance(active_job, dict) and bool(active_job)
+    if not has_persistent_active_job:
+        transient_active = _snapshot_active_transient_transcode(recordings_root)
+        if transient_active is not None:
+            progress_percent = int(transient_active.get("progress_percent", 0) or 0)
+            display_name = str(
+                transient_active.get("file_name")
+                or transient_active.get("relative_path")
+                or "live dvr"
+            ).strip()
+            snapshot["active"] = {
+                "relative_path": str(transient_active.get("relative_path", "")),
+                "file_name": str(transient_active.get("file_name", "")),
+                "progress_percent": progress_percent,
+                "started_at": str(transient_active.get("started_at", "")),
+            }
+            snapshot["is_working"] = True
+            snapshot["indicator_text"] = f"{display_name} ({progress_percent}%)"
 
     return jsonify(snapshot)
 
@@ -1336,10 +1647,21 @@ def recording_media(recording_path: str) -> object:
                     dvr_snapshot_path = None
 
                 if dvr_snapshot_path is not None:
-                    converted_mp4 = _materialize_ts_mp4_file(
+                    _register_transient_transcode_job(
                         resolved_path,
-                        output_path=dvr_snapshot_path,
+                        dvr_snapshot_path,
+                        transient_cache_id=transient_cache_id or None,
+                        live_dvr_key=live_dvr_key,
                     )
+                    try:
+                        converted_mp4 = _materialize_ts_mp4_file(
+                            resolved_path,
+                            output_path=dvr_snapshot_path,
+                            transient_cache_id=transient_cache_id or None,
+                        )
+                    finally:
+                        _unregister_transient_transcode_job(dvr_snapshot_path)
+
                     if converted_mp4 is not None:
                         response = send_file(
                             converted_mp4,
@@ -1480,6 +1802,28 @@ def recording_transcode_status(recording_path: str) -> object:
     recording_manager = services["recording_manager"]
     if _is_live_recording_path(recording_manager, resolved_path):
         if prefer_recorded_playback:
+            transient_cache_id = request.args.get("transient_id", "").strip()
+            live_dvr_key = request.args.get("live_dvr", "").strip()
+            has_transient_id = _is_valid_transient_cache_id(transient_cache_id)
+            has_live_dvr_key = _is_valid_live_dvr_key(live_dvr_key)
+            if has_transient_id and has_live_dvr_key:
+                try:
+                    dvr_snapshot_path = _live_dvr_snapshot_path(
+                        root,
+                        resolved_path,
+                        live_dvr_key,
+                        transient_cache_id=transient_cache_id,
+                    )
+                except (OSError, ValueError):
+                    dvr_snapshot_path = None
+
+                if dvr_snapshot_path is not None:
+                    live_dvr_status = _build_live_dvr_transcode_status(
+                        dvr_snapshot_path,
+                        source_size_bytes,
+                    )
+                    return jsonify(live_dvr_status)
+
             return jsonify(
                 {
                     "available": False,
@@ -1773,6 +2117,8 @@ def release_transcode_cache() -> object:
     if not _is_valid_transient_cache_id(transient_cache_id):
         return jsonify({"ok": False, "error": "Invalid transient cache id."}), 400
 
+    cancelled_processes = _request_cancel_transient_jobs(transient_cache_id)
+
     cache_dir = _video_cache_dir()
     removed_files = 0
     removed_size_bytes = 0
@@ -1798,6 +2144,7 @@ def release_transcode_cache() -> object:
     return jsonify(
         {
             "ok": True,
+            "cancelled_processes": cancelled_processes,
             "removed_files": removed_files,
             "removed_size_bytes": removed_size_bytes,
         }
