@@ -121,10 +121,32 @@
                                         <div class="video-player-controls" id="video-player-controls">
                                             <div class="video-controls-main-row{% if recording.is_live %} has-live-middle{% endif %}">
                                                 <div class="video-controls-left">
+                                                    <button
+                                                        type="button"
+                                                        id="player-previous-recording"
+                                                        class="video-control-button video-icon-button video-nav-button"
+                                                        data-target-url="{{ previous_recording.view_url if previous_recording else '' }}"
+                                                        aria-label="{% if previous_recording %}Play previous video: {{ previous_recording.display_title }}{% else %}No previous video{% endif %}"
+                                                        {% if not previous_recording %}disabled{% endif %}
+                                                    >
+                                                        <svg class="video-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+                                                        <span class="sr-only">Previous video</span>
+                                                    </button>
                                                     <button type="button" id="player-play-toggle" class="video-control-button video-icon-button" aria-label="Pause video">
                                                         <svg class="video-icon-svg" data-icon-name="play" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
                                                         <svg class="video-icon-svg" data-icon-name="pause" viewBox="0 0 24 24" aria-hidden="true" hidden fill="currentColor" stroke="none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                                                         <span class="sr-only">Pause</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        id="player-next-recording"
+                                                        class="video-control-button video-icon-button video-nav-button"
+                                                        data-target-url="{{ next_recording.view_url if next_recording else '' }}"
+                                                        aria-label="{% if next_recording %}Play next video: {{ next_recording.display_title }}{% else %}No next video{% endif %}"
+                                                        {% if not next_recording %}disabled{% endif %}
+                                                    >
+                                                        <svg class="video-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+                                                        <span class="sr-only">Next video</span>
                                                     </button>
                                                 </div>
                                                 <div class="video-progress-row">
@@ -191,13 +213,25 @@
                                                             <span id="playback-speed-value">1x</span>
                                                             <span class="sr-only">Playback settings</span>
                                                         </button>
-                                                        <div id="player-settings-panel" class="playback-speed-control playback-speed-popover" role="group" aria-label="Playback speed" hidden>
+                                                        <div id="player-settings-panel" class="playback-speed-control playback-speed-popover" role="group" aria-label="Playback settings" hidden>
+                                                            <div class="video-autoplay-setting">
+                                                                <span class="video-autoplay-text">Autoplay next</span>
+                                                                <label class="toggle-switch video-autoplay-toggle" for="autoplay-next-toggle">
+                                                                    <input id="autoplay-next-toggle" type="checkbox" role="switch" aria-checked="true" aria-label="Autoplay next recording when current video ends" checked>
+                                                                    <span class="toggle-slider" aria-hidden="true"></span>
+                                                                    <span id="autoplay-next-label" class="toggle-label">On</span>
+                                                                </label>
+                                                            </div>
                                                             <div class="playback-speed-options" role="group" aria-label="Playback speed presets">
-                                                                <button type="button" class="playback-speed-option" data-playback-speed="0.75" aria-label="Set playback speed to 0.75x">0.75x</button>
-                                                                <button type="button" class="playback-speed-option" data-playback-speed="1" aria-label="Set playback speed to 1x">1x</button>
-                                                                <button type="button" class="playback-speed-option" data-playback-speed="1.25" aria-label="Set playback speed to 1.25x">1.25x</button>
-                                                                <button type="button" class="playback-speed-option" data-playback-speed="1.5" aria-label="Set playback speed to 1.5x">1.5x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="3" aria-label="Set playback speed to 3x">3x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="2.5" aria-label="Set playback speed to 2.5x">2.5x</button>
                                                                 <button type="button" class="playback-speed-option" data-playback-speed="2" aria-label="Set playback speed to 2x">2x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="1.75" aria-label="Set playback speed to 1.75x">1.75x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="1.5" aria-label="Set playback speed to 1.5x">1.5x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="1.25" aria-label="Set playback speed to 1.25x">1.25x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="1" aria-label="Set playback speed to 1x">1x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="0.75" aria-label="Set playback speed to 0.75x">0.75x</button>
+                                                                <button type="button" class="playback-speed-option" data-playback-speed="0.5" aria-label="Set playback speed to 0.5x">0.5x</button>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -298,7 +332,9 @@
             const playerControls = document.getElementById('video-player-controls');
             const playerCenterToggle = document.getElementById('player-center-toggle');
             if (centerToggleAnchor && playerCenterToggle) centerToggleAnchor.appendChild(playerCenterToggle);
+            const playerPreviousButton = document.getElementById('player-previous-recording');
             const playerPlayToggle = document.getElementById('player-play-toggle');
+            const playerNextButton = document.getElementById('player-next-recording');
             const playerSeekSlider = document.getElementById('player-seek-slider');
             const playerCurrentTime = document.getElementById('player-current-time');
             const playerDurationTime = document.getElementById('player-duration-time');
@@ -316,6 +352,8 @@
             const playerChatRestoreButton = document.getElementById('player-chat-restore');
             const playbackSpeedValue = document.getElementById('playback-speed-value');
             const playbackSpeedButtons = Array.from(document.querySelectorAll('[data-playback-speed]'));
+            const autoplayNextToggle = document.getElementById('autoplay-next-toggle');
+            const autoplayNextLabel = document.getElementById('autoplay-next-label');
             const gestureBackIndicator = document.getElementById('video-gesture-back');
             const gestureForwardIndicator = document.getElementById('video-gesture-forward');
             const gestureHoldIndicator = document.getElementById('video-gesture-hold');
@@ -344,6 +382,8 @@
             const chatUrl = {{ recording.chat_url | tojson }};
             const recordingSizeUrl = {{ url_for('dashboard.recording_size', recording_slug=recording.view_slug) | tojson }};
             const recordingTranscodeStatusUrl = {{ recording.transcode_status_url | tojson }};
+            const previousRecordingUrl = {{ (previous_recording.view_url if previous_recording else '') | tojson }};
+            const nextRecordingUrl = {{ (next_recording.view_url if next_recording else '') | tojson }};
             const buildUrlWithParams = (rawUrl, params = {}) => {
                 const baseUrl = String(rawUrl || '').trim();
                 if (!baseUrl) {
@@ -393,22 +433,34 @@
             const liveBufferStorageKey = 'vstreamware.live-buffer-seconds';
             const chatSyncSourceStorageKey = 'vstreamware.chat-sync-source';
             const playbackSpeedStorageKey = 'vstreamware.playback-speed';
+            const autoplayNextStorageKey = 'vstreamware.autoplay-next-enabled';
+            const playerVolumeStorageKey = 'vstreamware.player-volume';
+            const playerMutedStorageKey = 'vstreamware.player-muted';
             const fullscreenChatModeStorageKey = 'vstreamware.fullscreen-chat-mode';
             const syncedChatModeStorageKey = 'vstreamware.chat-mode';
             const fullscreenSideChatWidthStorageKey = 'vstreamware.fullscreen-side-chat-width';
+            const normalSideChatWidthStorageKey = 'vstreamware.normal-side-chat-width';
             const overlayChatWidthStorageKey = 'vstreamware.overlay-chat-width';
             const normalChatCollapsedStorageKey = 'vstreamware.normal-chat-collapsed';
             const overlaySideLeftStorageKey = 'vstreamware.chat-overlay-left';
-            const playbackSpeedOptions = [0.75, 1, 1.25, 1.5, 2];
+            const playbackSpeedOptions = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+            const controlPopoverViewportPaddingPx = 10;
+            const controlPopoverGapPx = 8;
+            const controlPopoverMinHeightPx = 120;
             const fullscreenSideChatDefaultRatio = 0.34;
             const fullscreenSideChatMinWidthDesktopPx = 280;
             const fullscreenSideChatMinWidthMobilePx = 210;
+            const normalSideChatMinWidthDesktopPx = 260;
+            const normalSideChatMinWidthMobilePx = 220;
+            const normalSideChatDefaultRatio = 0.22;
             const overlayChatMinWidthDesktopPx = 260;
             const overlayChatMinWidthMobilePx = 210;
             const normalOverlayChatDefaultRatio = 0.34;
             const normalOverlayChatDefaultMobileRatio = 0.82;
             const fullscreenOverlayChatDefaultRatio = 0.36;
-            const holdBoostPlaybackSpeed = 2;
+            const holdBoostPlaybackSpeedDefault = 2;
+            const holdBoostPlaybackSpeedHigh = 3;
+            const holdBoostThresholdSpeed = 2;
             const gestureSeekSeconds = 10;
             const doubleTapMaxDelayMs = 280;
             const holdBoostDelayMs = 320;
@@ -430,6 +482,8 @@
             let holdPointerStartY = 0;
             let holdBoostTimer = null;
             let seekGestureTimer = null;
+            let autoplayNextEnabled = true;
+            let hasPendingRecordingNavigation = false;
             let lastTouchTapAt = 0;
             let lastTouchTapSide = '';
             let lastTouchTapX = 0;
@@ -441,6 +495,7 @@
             let lastVisibleFullscreenChatMode = 'side';
             let activeChatResizePointerId = null;
             let isChatSideResizing = false;
+            let activeSideChatResizeMode = '';
             let activeOverlayChatResizePointerId = null;
             let isOverlayChatResizing = false;
             let overlaySideToggleDragStartX = 0;
@@ -469,6 +524,10 @@
 
             const getOverlayChatMinWidthPx = () => (
                 isMobileViewport() ? overlayChatMinWidthMobilePx : overlayChatMinWidthDesktopPx
+            );
+
+            const getNormalSideChatMinWidthPx = () => (
+                isMobileViewport() ? normalSideChatMinWidthMobilePx : normalSideChatMinWidthDesktopPx
             );
 
             const lockLandscapeOnMobile = async () => {
@@ -592,6 +651,51 @@
                     return clampFullscreenSideChatWidth(stored);
                 } catch (_error) {
                     return clampFullscreenSideChatWidth(null);
+                }
+            };
+
+            const clampNormalSideChatWidth = (rawWidth) => {
+                const viewportWidth = Math.max(window.innerWidth || 0, 640);
+                const minWidth = getNormalSideChatMinWidthPx();
+                const maxRatio = isMobileViewport() ? 0.72 : 0.58;
+                const maxWidth = Math.max(minWidth + 40, Math.floor(viewportWidth * maxRatio));
+                const fallback = Math.round(viewportWidth * normalSideChatDefaultRatio);
+                const parsed = Number.parseInt(String(rawWidth), 10);
+                const candidate = Number.isFinite(parsed) ? parsed : fallback;
+                return Math.max(minWidth, Math.min(maxWidth, candidate));
+            };
+
+            const setNormalSideChatWidth = (rawWidth, persist = true) => {
+                if (!videoDetailContent) {
+                    return;
+                }
+
+                const widthPx = clampNormalSideChatWidth(rawWidth);
+                videoDetailContent.style.setProperty('--video-chat-width', `${widthPx}px`);
+
+                if (chatResizeHandle) {
+                    chatResizeHandle.setAttribute('aria-valuenow', String(widthPx));
+                }
+
+                if (persist) {
+                    try {
+                        window.localStorage.setItem(normalSideChatWidthStorageKey, String(widthPx));
+                    } catch (_error) {
+                        // Ignore storage failures.
+                    }
+                }
+            };
+
+            const readPersistedNormalSideChatWidth = () => {
+                try {
+                    const stored = window.localStorage.getItem(normalSideChatWidthStorageKey);
+                    if (!stored) {
+                        return clampNormalSideChatWidth(null);
+                    }
+
+                    return clampNormalSideChatWidth(stored);
+                } catch (_error) {
+                    return clampNormalSideChatWidth(null);
                 }
             };
 
@@ -850,6 +954,7 @@
                 setNormalModeChatHeight();
                 updatePlayerChatRestoreButton();
                 updateChatPanelToggleButtons();
+                updateChatResizeHandleVisibility();
                 syncSharedPanelOverlayState();
             };
 
@@ -875,6 +980,7 @@
                 setNormalModeChatHeight();
                 updatePlayerChatRestoreButton();
                 updateChatPanelToggleButtons();
+                updateChatResizeHandleVisibility();
                 syncSharedPanelOverlayState();
             };
 
@@ -903,6 +1009,7 @@
                 setNormalModeChatHeight();
                 updatePlayerChatRestoreButton();
                 updateChatPanelToggleButtons();
+                updateChatResizeHandleVisibility();
                 syncSharedPanelOverlayState();
             };
 
@@ -931,12 +1038,16 @@
                     } else {
                         videoDetailContent.classList.remove('chat-panel-overlay');
                         videoDetailContent.classList.toggle('chat-panel-collapsed', readPersistedNormalChatCollapsed());
+                        if (!videoDetailContent.classList.contains('chat-panel-collapsed') && !isNormalMobileChatOverlayViewport()) {
+                            setNormalSideChatWidth(readPersistedNormalSideChatWidth(), false);
+                        }
                     }
                 }
 
                 setNormalModeChatHeight();
                 updatePlayerChatRestoreButton();
                 updateChatPanelToggleButtons();
+                updateChatResizeHandleVisibility();
                 syncSharedPanelOverlayState();
             };
 
@@ -977,14 +1088,41 @@
                 && videoDetailContent.classList.contains('chat-mode-side')
             );
 
+            const isNormalSideChatResizeMode = () => Boolean(
+                videoDetailContent
+                && !isPlayerFullscreen()
+                && !isNormalOverlayMode()
+                && !isNormalChatPanelCollapsed()
+                && !isNormalMobileChatOverlayViewport()
+            );
+
+            const isSideChatResizeActive = () => isFullscreenSideChatMode() || isNormalSideChatResizeMode();
+
             const updateChatResizeHandleVisibility = () => {
                 if (!chatResizeHandle) {
                     return;
                 }
 
-                const isActive = isFullscreenSideChatMode();
+                const isActive = isSideChatResizeActive();
                 chatResizeHandle.tabIndex = isActive ? 0 : -1;
                 chatResizeHandle.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+
+                if (!isActive) {
+                    return;
+                }
+
+                if (isFullscreenSideChatMode()) {
+                    const current = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-side-chat-width').trim();
+                    const widthPx = clampFullscreenSideChatWidth(current);
+                    chatResizeHandle.setAttribute('aria-valuemin', String(getFullscreenSideChatMinWidthPx()));
+                    chatResizeHandle.setAttribute('aria-valuenow', String(widthPx));
+                    return;
+                }
+
+                const current = getComputedStyle(videoDetailContent).getPropertyValue('--video-chat-width').trim();
+                const widthPx = clampNormalSideChatWidth(current);
+                chatResizeHandle.setAttribute('aria-valuemin', String(getNormalSideChatMinWidthPx()));
+                chatResizeHandle.setAttribute('aria-valuenow', String(widthPx));
             };
 
             const stopSideChatResize = () => {
@@ -994,14 +1132,34 @@
 
                 isChatSideResizing = false;
                 activeChatResizePointerId = null;
+                const resizeMode = activeSideChatResizeMode;
+                activeSideChatResizeMode = '';
                 document.body.classList.remove('is-chat-side-resizing');
 
                 if (!videoDetailContent) {
                     return;
                 }
 
-                const current = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-side-chat-width').trim();
-                setFullscreenSideChatWidth(current || readPersistedFullscreenSideChatWidth(), true);
+                if (resizeMode === 'fullscreen') {
+                    const currentFullscreen = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-side-chat-width').trim();
+                    setFullscreenSideChatWidth(currentFullscreen || readPersistedFullscreenSideChatWidth(), true);
+                    return;
+                }
+
+                if (resizeMode === 'normal') {
+                    const currentNormal = getComputedStyle(videoDetailContent).getPropertyValue('--video-chat-width').trim();
+                    setNormalSideChatWidth(currentNormal || readPersistedNormalSideChatWidth(), true);
+                    return;
+                }
+
+                if (isFullscreenSideChatMode()) {
+                    const currentFullscreen = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-side-chat-width').trim();
+                    setFullscreenSideChatWidth(currentFullscreen || readPersistedFullscreenSideChatWidth(), true);
+                    return;
+                }
+
+                const currentNormal = getComputedStyle(videoDetailContent).getPropertyValue('--video-chat-width').trim();
+                setNormalSideChatWidth(currentNormal || readPersistedNormalSideChatWidth(), true);
             };
 
             const stopOverlayChatResize = () => {
@@ -1023,7 +1181,7 @@
                 setOverlayChatWidth(current || readPersistedOverlayChatWidth(), true);
             };
 
-            const resizeSideChatFromClientX = (clientX) => {
+            const resizeSideChatFromClientX = (clientX, mode = '') => {
                 if (!videoDetailContent) {
                     return;
                 }
@@ -1034,7 +1192,13 @@
                 }
 
                 const width = Math.round(bounds.right - clientX);
-                setFullscreenSideChatWidth(width, false);
+                const resizeMode = mode || (isFullscreenSideChatMode() ? 'fullscreen' : 'normal');
+                if (resizeMode === 'fullscreen') {
+                    setFullscreenSideChatWidth(width, false);
+                    return;
+                }
+
+                setNormalSideChatWidth(width, false);
             };
 
             const resizeOverlayChatFromClientX = (clientX) => {
@@ -1481,6 +1645,134 @@
                 }
             };
 
+            const normalizePlayerVolume = (rawValue) => {
+                const parsed = Number(rawValue);
+                if (!Number.isFinite(parsed)) {
+                    return 1;
+                }
+
+                return Math.max(0, Math.min(1, parsed));
+            };
+
+            const parsePersistedBoolean = (rawValue) => {
+                const normalized = String(rawValue || '').trim().toLowerCase();
+                return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+            };
+
+            const readPersistedPlayerVolume = () => {
+                try {
+                    const raw = window.localStorage.getItem(playerVolumeStorageKey);
+                    if (raw === null) {
+                        return 1;
+                    }
+
+                    return normalizePlayerVolume(raw);
+                } catch (_error) {
+                    return 1;
+                }
+            };
+
+            const readPersistedPlayerMuted = () => {
+                try {
+                    const raw = window.localStorage.getItem(playerMutedStorageKey);
+                    return parsePersistedBoolean(raw);
+                } catch (_error) {
+                    return false;
+                }
+            };
+
+            const persistPlayerVolume = (rawValue) => {
+                try {
+                    window.localStorage.setItem(playerVolumeStorageKey, String(normalizePlayerVolume(rawValue)));
+                } catch (_error) {
+                    // Ignore storage failures.
+                }
+            };
+
+            const persistPlayerMuted = (muted) => {
+                try {
+                    window.localStorage.setItem(playerMutedStorageKey, muted ? '1' : '0');
+                } catch (_error) {
+                    // Ignore storage failures.
+                }
+            };
+
+            const persistPlayerAudioState = () => {
+                if (!player) {
+                    return;
+                }
+
+                persistPlayerVolume(player.volume);
+                persistPlayerMuted(player.muted || player.volume <= 0);
+            };
+
+            const readPersistedAutoplayNextEnabled = () => {
+                try {
+                    const raw = window.localStorage.getItem(autoplayNextStorageKey);
+                    if (raw === null) {
+                        return true;
+                    }
+
+                    return parsePersistedBoolean(raw);
+                } catch (_error) {
+                    return true;
+                }
+            };
+
+            const persistAutoplayNextEnabled = (enabled) => {
+                try {
+                    window.localStorage.setItem(autoplayNextStorageKey, enabled ? '1' : '0');
+                } catch (_error) {
+                    // Ignore storage failures.
+                }
+            };
+
+            const updateAutoplayNextUi = () => {
+                if (autoplayNextToggle) {
+                    autoplayNextToggle.checked = autoplayNextEnabled;
+                    autoplayNextToggle.setAttribute('aria-checked', autoplayNextEnabled ? 'true' : 'false');
+                }
+
+                if (autoplayNextLabel) {
+                    autoplayNextLabel.textContent = autoplayNextEnabled ? 'On' : 'Off';
+                }
+            };
+
+            const setAutoplayNextEnabled = (enabled, persist = true) => {
+                autoplayNextEnabled = Boolean(enabled);
+                updateAutoplayNextUi();
+                if (persist) {
+                    persistAutoplayNextEnabled(autoplayNextEnabled);
+                }
+
+                return autoplayNextEnabled;
+            };
+
+            const updateRecordingNavigationUi = () => {
+                if (playerPreviousButton) {
+                    const hasPrevious = Boolean(previousRecordingUrl);
+                    playerPreviousButton.disabled = !hasPrevious;
+                    playerPreviousButton.setAttribute('aria-disabled', hasPrevious ? 'false' : 'true');
+                }
+
+                if (playerNextButton) {
+                    const hasNext = Boolean(nextRecordingUrl);
+                    playerNextButton.disabled = !hasNext;
+                    playerNextButton.setAttribute('aria-disabled', hasNext ? 'false' : 'true');
+                }
+            };
+
+            const navigateToRecording = (targetUrl) => {
+                const nextUrl = String(targetUrl || '').trim();
+                if (!nextUrl || hasPendingRecordingNavigation) {
+                    return false;
+                }
+
+                hasPendingRecordingNavigation = true;
+                window.location.assign(nextUrl);
+                return true;
+            };
+
             const setSeekIndicatorVisible = (indicator, visible) => {
                 if (!indicator) {
                     return;
@@ -1526,6 +1818,26 @@
 
                 gestureHoldIndicator.hidden = false;
                 gestureHoldIndicator.classList.add('is-visible');
+            };
+
+            const resolveHoldBoostPlaybackSpeed = () => {
+                const baseSpeed = Math.max(
+                    normalizePlaybackSpeed(preferredPlaybackSpeed),
+                    normalizePlaybackSpeed(effectivePlaybackSpeed),
+                );
+                if (baseSpeed >= holdBoostThresholdSpeed) {
+                    return holdBoostPlaybackSpeedHigh;
+                }
+
+                return holdBoostPlaybackSpeedDefault;
+            };
+
+            const updateHoldGestureLabel = (rawSpeed) => {
+                if (!gestureHoldIndicator) {
+                    return;
+                }
+
+                gestureHoldIndicator.textContent = formatPlaybackSpeed(rawSpeed);
             };
 
             const updatePlaybackSpeedUi = () => {
@@ -1578,7 +1890,7 @@
                 }
 
                 if (holdBoostActive) {
-                    applyPlaybackSpeed(holdBoostPlaybackSpeed);
+                    applyPlaybackSpeed(resolveHoldBoostPlaybackSpeed());
                     return;
                 }
 
@@ -1630,6 +1942,80 @@
                 }
             };
 
+            const clampNumber = (value, minValue, maxValue) => {
+                if (maxValue < minValue) {
+                    return minValue;
+                }
+
+                return Math.min(maxValue, Math.max(minValue, value));
+            };
+
+            const clearControlPopoverPosition = (panel) => {
+                if (!panel) {
+                    return;
+                }
+
+                panel.classList.remove('is-anchored');
+                panel.style.removeProperty('left');
+                panel.style.removeProperty('top');
+                panel.style.removeProperty('right');
+                panel.style.removeProperty('bottom');
+                panel.style.removeProperty('max-height');
+            };
+
+            const positionControlPopoverInViewport = (toggleButton, panel) => {
+                if (!toggleButton || !panel || panel.hidden) {
+                    return;
+                }
+
+                const viewportWidth = Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0);
+                const viewportHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
+                if (!viewportWidth || !viewportHeight) {
+                    return;
+                }
+
+                panel.classList.add('is-anchored');
+                panel.style.removeProperty('left');
+                panel.style.removeProperty('top');
+                panel.style.removeProperty('right');
+                panel.style.removeProperty('bottom');
+
+                const viewportMaxHeight = Math.max(controlPopoverMinHeightPx, viewportHeight - (controlPopoverViewportPaddingPx * 2));
+                panel.style.maxHeight = `${Math.floor(viewportMaxHeight)}px`;
+
+                const toggleRect = toggleButton.getBoundingClientRect();
+                let panelRect = panel.getBoundingClientRect();
+                const spaceAbove = toggleRect.top - controlPopoverGapPx - controlPopoverViewportPaddingPx;
+                const clampedMaxHeight = clampNumber(spaceAbove, controlPopoverMinHeightPx, viewportMaxHeight);
+                panel.style.maxHeight = `${Math.floor(clampedMaxHeight)}px`;
+
+                panelRect = panel.getBoundingClientRect();
+                const left = clampNumber(
+                    toggleRect.right - panelRect.width,
+                    controlPopoverViewportPaddingPx,
+                    viewportWidth - controlPopoverViewportPaddingPx - panelRect.width,
+                );
+                const intendedTop = toggleRect.top - controlPopoverGapPx - panelRect.height;
+                const top = clampNumber(
+                    intendedTop,
+                    controlPopoverViewportPaddingPx,
+                    viewportHeight - controlPopoverViewportPaddingPx - panelRect.height,
+                );
+
+                panel.style.left = `${Math.round(left)}px`;
+                panel.style.top = `${Math.round(top)}px`;
+            };
+
+            const syncOpenControlPopoverPositions = () => {
+                if (isSpeedMenuOpen) {
+                    positionControlPopoverInViewport(playbackSpeedToggle, playerSettingsPanel);
+                }
+
+                if (isVolumeMenuOpen) {
+                    positionControlPopoverInViewport(playerVolumeToggle, playerVolumePanel);
+                }
+            };
+
             const setSpeedMenuOpen = (isOpen) => {
                 if (!playbackSpeedToggle || !playerSettingsPanel) {
                     return;
@@ -1641,6 +2027,17 @@
                 if (videoPlayerWrap) {
                     videoPlayerWrap.classList.toggle('is-speed-menu-open', isSpeedMenuOpen);
                 }
+
+                if (isSpeedMenuOpen) {
+                    window.requestAnimationFrame(() => {
+                        if (isSpeedMenuOpen) {
+                            positionControlPopoverInViewport(playbackSpeedToggle, playerSettingsPanel);
+                        }
+                    });
+                } else {
+                    clearControlPopoverPosition(playerSettingsPanel);
+                }
+
                 updateFullscreenOverlayChatMetrics();
             };
 
@@ -1655,6 +2052,17 @@
                 if (videoPlayerWrap) {
                     videoPlayerWrap.classList.toggle('is-volume-menu-open', isVolumeMenuOpen);
                 }
+
+                if (isVolumeMenuOpen) {
+                    window.requestAnimationFrame(() => {
+                        if (isVolumeMenuOpen) {
+                            positionControlPopoverInViewport(playerVolumeToggle, playerVolumePanel);
+                        }
+                    });
+                } else {
+                    clearControlPopoverPosition(playerVolumePanel);
+                }
+
                 updateFullscreenOverlayChatMetrics();
             };
 
@@ -2060,13 +2468,19 @@
                 return;
             }
 
-            player.muted = false;
-            player.defaultMuted = false;
+            const persistedPlayerVolume = readPersistedPlayerVolume();
+            const persistedPlayerMuted = readPersistedPlayerMuted();
+            player.volume = persistedPlayerVolume;
+            player.muted = persistedPlayerMuted || persistedPlayerVolume <= 0;
+            player.defaultMuted = player.muted;
             player.autoplay = isLive;
             player.controls = false;
 
+            updateRecordingNavigationUi();
+            setAutoplayNextEnabled(readPersistedAutoplayNextEnabled(), false);
+
             if (playerVolumeSlider) {
-                playerVolumeSlider.value = String(Math.max(0, Math.min(1, player.volume || 1)));
+                playerVolumeSlider.value = String(player.muted ? 0 : Math.max(0, Math.min(1, player.volume || 1)));
             }
 
             if (playerCenterToggle) {
@@ -2078,6 +2492,24 @@
             if (playerPlayToggle) {
                 playerPlayToggle.addEventListener('click', () => {
                     togglePlayerPlayback();
+                });
+            }
+
+            if (playerPreviousButton) {
+                playerPreviousButton.addEventListener('click', () => {
+                    navigateToRecording(previousRecordingUrl);
+                });
+            }
+
+            if (playerNextButton) {
+                playerNextButton.addEventListener('click', () => {
+                    navigateToRecording(nextRecordingUrl);
+                });
+            }
+
+            if (autoplayNextToggle) {
+                autoplayNextToggle.addEventListener('change', () => {
+                    setAutoplayNextEnabled(autoplayNextToggle.checked);
                 });
             }
 
@@ -2147,15 +2579,16 @@
 
             if (chatResizeHandle) {
                 chatResizeHandle.addEventListener('pointerdown', (event) => {
-                    if (!isFullscreenSideChatMode()) {
+                    if (!isSideChatResizeActive()) {
                         return;
                     }
 
                     isChatSideResizing = true;
                     activeChatResizePointerId = event.pointerId;
+                    activeSideChatResizeMode = isFullscreenSideChatMode() ? 'fullscreen' : 'normal';
                     document.body.classList.add('is-chat-side-resizing');
                     chatResizeHandle.setPointerCapture(event.pointerId);
-                    resizeSideChatFromClientX(event.clientX);
+                    resizeSideChatFromClientX(event.clientX, activeSideChatResizeMode);
                     event.preventDefault();
                 });
 
@@ -2164,7 +2597,7 @@
                         return;
                     }
 
-                    resizeSideChatFromClientX(event.clientX);
+                    resizeSideChatFromClientX(event.clientX, activeSideChatResizeMode);
                 });
 
                 chatResizeHandle.addEventListener('pointerup', (event) => {
@@ -2180,7 +2613,7 @@
                 });
 
                 chatResizeHandle.addEventListener('keydown', (event) => {
-                    if (!isFullscreenSideChatMode()) {
+                    if (!isSideChatResizeActive()) {
                         return;
                     }
 
@@ -2188,10 +2621,19 @@
                         return;
                     }
 
-                    const current = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-side-chat-width').trim();
-                    const currentPx = clampFullscreenSideChatWidth(current);
+                    const resizeMode = isFullscreenSideChatMode() ? 'fullscreen' : 'normal';
+                    const current = resizeMode === 'fullscreen'
+                        ? getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-side-chat-width').trim()
+                        : getComputedStyle(videoDetailContent).getPropertyValue('--video-chat-width').trim();
+                    const currentPx = resizeMode === 'fullscreen'
+                        ? clampFullscreenSideChatWidth(current)
+                        : clampNormalSideChatWidth(current);
                     const delta = event.key === 'ArrowLeft' ? 24 : -24;
-                    setFullscreenSideChatWidth(currentPx + delta, true);
+                    if (resizeMode === 'fullscreen') {
+                        setFullscreenSideChatWidth(currentPx + delta, true);
+                    } else {
+                        setNormalSideChatWidth(currentPx + delta, true);
+                    }
                     event.preventDefault();
                 });
             }
@@ -2373,6 +2815,9 @@
                     stopSideChatResize();
                     stopOverlayChatResize();
                     enforceNormalMobileChatLayout();
+                    if (isNormalSideChatResizeMode()) {
+                        setNormalSideChatWidth(readPersistedNormalSideChatWidth(), false);
+                    }
                     setOverlayChatWidth(readPersistedOverlayChatWidth(), false, { fullscreen: false });
                 }
 
@@ -2388,11 +2833,21 @@
                 if (isFullscreenSideChatMode()) {
                     const current = getComputedStyle(videoDetailContent).getPropertyValue('--fullscreen-side-chat-width').trim();
                     setFullscreenSideChatWidth(current || readPersistedFullscreenSideChatWidth(), false);
+                } else if (isNormalSideChatResizeMode()) {
+                    const current = getComputedStyle(videoDetailContent).getPropertyValue('--video-chat-width').trim();
+                    setNormalSideChatWidth(current || readPersistedNormalSideChatWidth(), false);
                 }
                 const currentOverlayWidth = getComputedStyle(videoDetailContent).getPropertyValue('--overlay-chat-width').trim();
                 setOverlayChatWidth(currentOverlayWidth || readPersistedOverlayChatWidth(), false);
+                syncOpenControlPopoverPositions();
                 updateFullscreenOverlayChatMetrics();
                 updateChatPanelToggleButtons();
+            });
+
+            window.addEventListener('orientationchange', () => {
+                window.setTimeout(() => {
+                    syncOpenControlPopoverPositions();
+                }, 120);
             });
 
             if (chatList) {
@@ -3139,6 +3594,7 @@
 
                 player.volume = nextValue;
                 player.muted = nextValue <= 0;
+                persistPlayerAudioState();
                 updatePlayerVolumeUi();
             };
 
@@ -3152,6 +3608,7 @@
                     player.muted = true;
                 }
 
+                persistPlayerAudioState();
                 updatePlayerVolumeUi();
             };
 
@@ -3345,9 +3802,11 @@
                         return;
                     }
 
+                    const holdBoostTargetSpeed = resolveHoldBoostPlaybackSpeed();
                     holdBoostRestoreSpeed = effectivePlaybackSpeed;
                     holdBoostActive = true;
-                    applyPlaybackSpeed(holdBoostPlaybackSpeed);
+                    updateHoldGestureLabel(holdBoostTargetSpeed);
+                    applyPlaybackSpeed(holdBoostTargetSpeed);
                     setHoldGestureVisible(true);
                 }, holdBoostDelayMs);
             };
@@ -3592,9 +4051,11 @@
             setLiveOffsetSeconds(readPersistedLiveOffsetSeconds(), false);
             preferredPlaybackSpeed = readPersistedPlaybackSpeed();
             holdBoostRestoreSpeed = preferredPlaybackSpeed;
+            updateHoldGestureLabel(resolveHoldBoostPlaybackSpeed());
             applyPlaybackSpeed(preferredPlaybackSpeed);
             setNormalChatPanelCollapsed(readPersistedNormalChatCollapsed(), false);
             enforceNormalMobileChatLayout();
+            setNormalSideChatWidth(readPersistedNormalSideChatWidth(), false);
             setOverlayChatWidth(readPersistedOverlayChatWidth(), false);
             setOverlaySideLeft(readPersistedOverlaySideLeft(), false);
             const initialFullscreenMode = readPersistedFullscreenChatMode();
@@ -3711,6 +4172,8 @@
                             autoReturnToLiveOnCatchUp: true,
                         });
                     }
+                } else if (autoplayNextEnabled && navigateToRecording(nextRecordingUrl)) {
+                    return;
                 }
 
                 updateCustomPlayerUi();
@@ -3722,6 +4185,7 @@
             });
 
             player.addEventListener('volumechange', () => {
+                persistPlayerAudioState();
                 updatePlayerVolumeUi();
             });
 
@@ -3837,9 +4301,15 @@
             });
 
             player.addEventListener('contextmenu', (event) => {
-                if ((isMobileViewport() || holdBoostActive || holdPointerId !== null) && event.cancelable) {
+                const suppressForHoldGesture = isMobileViewport() || holdBoostActive || holdPointerId !== null;
+                if (suppressForHoldGesture && event.cancelable) {
                     event.preventDefault();
                 }
+
+                if (suppressForHoldGesture) {
+                    return;
+                }
+
                 deactivateHoldBoost();
             });
 

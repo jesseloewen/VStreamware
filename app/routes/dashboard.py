@@ -7,9 +7,11 @@ import subprocess
 import threading
 import time
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
 from typing import Any
+from zoneinfo import available_timezones
 
 from flask import Blueprint, Response, abort, current_app, flash, jsonify, redirect, render_template, request, send_file, stream_with_context, url_for
 
@@ -61,6 +63,9 @@ _TRANSCODE_LOCKS_GUARD = threading.Lock()
 _TRANSCODE_LOCKS: dict[str, threading.Lock] = {}
 _TRANSIENT_TRANSCODE_JOBS_GUARD = threading.Lock()
 _TRANSIENT_TRANSCODE_JOBS: dict[str, dict[str, object]] = {}
+_MEDIA_DURATION_CACHE_GUARD = threading.Lock()
+_MEDIA_DURATION_CACHE: dict[str, int] = {}
+_MEDIA_DURATION_CACHE_MAX_ENTRIES = 6000
 
 try:
     import imageio_ffmpeg  # type: ignore[import-not-found]
@@ -113,6 +118,20 @@ def _recording_sort_key(item: dict[str, object]) -> tuple[int, str]:
     timestamp = int(item.get("recorded_at_unix", 0) or 0)
     relative_path = str(item.get("relative_path", ""))
     return timestamp, relative_path
+
+
+@lru_cache(maxsize=1)
+def _display_timezone_options() -> tuple[str, ...]:
+    try:
+        discovered = available_timezones()
+    except Exception:
+        discovered = {"UTC"}
+
+    if not isinstance(discovered, set):
+        discovered = set(discovered)
+
+    discovered.add("UTC")
+    return tuple(sorted(str(name) for name in discovered if isinstance(name, str) and name.strip()))
 
 
 def _thumbnail_cache_dir() -> Path:
@@ -664,6 +683,76 @@ def _find_recording_entry(catalog: dict[str, object], recording_path: str) -> di
     return None
 
 
+def _recording_navigation_payload(item: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(item, dict):
+        return None
+
+    view_slug = str(item.get("view_slug", "")).strip()
+    if not view_slug:
+        return None
+
+    return {
+        "view_slug": view_slug,
+        "view_url": url_for("dashboard.view_recording", recording_slug=view_slug),
+        "display_title": str(item.get("display_title", "")).strip() or str(item.get("file_name", "")).strip(),
+        "channel": str(item.get("channel", "")).strip(),
+        "recorded_at": item.get("recorded_at"),
+        "recorded_at_unix": int(item.get("recorded_at_unix", 0) or 0),
+    }
+
+
+def _channel_recording_neighbors(
+    catalog: dict[str, object],
+    current_record: dict[str, object],
+) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+    channel_name = str(current_record.get("channel", "")).strip()
+    current_relative_path = str(current_record.get("relative_path", "")).strip()
+    if not channel_name or not current_relative_path:
+        return None, None
+
+    recordings = catalog.get("recordings", [])
+    if not isinstance(recordings, list):
+        return None, None
+
+    channel_key = channel_name.lower()
+    filtered: list[dict[str, object]] = []
+    for item in recordings:
+        if not isinstance(item, dict):
+            continue
+
+        item_channel = str(item.get("channel", "")).strip().lower()
+        if item_channel != channel_key:
+            continue
+
+        item_relative_path = str(item.get("relative_path", "")).strip()
+        if not item_relative_path:
+            continue
+
+        item_can_play = bool(item.get("can_play", False))
+        if not item_can_play and item_relative_path != current_relative_path:
+            continue
+
+        filtered.append(item)
+
+    if not filtered:
+        return None, None
+
+    current_index = -1
+    for index, item in enumerate(filtered):
+        if str(item.get("relative_path", "")).strip() == current_relative_path:
+            current_index = index
+            break
+
+    if current_index < 0:
+        return None, None
+
+    # Catalog order is newest-first. Previous should go older; Next should go newer.
+    previous_item = filtered[current_index + 1] if current_index + 1 < len(filtered) else None
+    next_item = filtered[current_index - 1] if current_index > 0 else None
+
+    return _recording_navigation_payload(previous_item), _recording_navigation_payload(next_item)
+
+
 def _chat_sidecar_path_for_recording(recording_file: Path) -> Path:
     return recording_file.with_suffix(".chat.ndjson")
 
@@ -717,6 +806,136 @@ def _ffmpeg_command_candidates() -> list[list[str]]:
         unique_candidates.append(command)
 
     return unique_candidates
+
+
+def _ffprobe_command_candidates() -> list[str]:
+    candidates: list[str] = []
+
+    for command in _ffmpeg_command_candidates():
+        ffmpeg_binary = str(command[0]).strip()
+        if not ffmpeg_binary:
+            continue
+
+        ffmpeg_path = Path(ffmpeg_binary)
+        ffmpeg_name = ffmpeg_path.name
+        if "ffprobe" in ffmpeg_name.lower():
+            candidates.append(str(ffmpeg_path))
+            continue
+
+        if "ffmpeg" in ffmpeg_name.lower():
+            probe_name = re.sub("ffmpeg", "ffprobe", ffmpeg_name, flags=re.IGNORECASE)
+            probe_candidate = str(ffmpeg_path.with_name(probe_name))
+            candidates.append(probe_candidate)
+
+    candidates.append("ffprobe")
+
+    unique: list[str] = []
+    seen = set()
+    for candidate in candidates:
+        normalized = str(candidate).strip()
+        if not normalized or normalized in seen:
+            continue
+
+        seen.add(normalized)
+        unique.append(normalized)
+
+    return unique
+
+
+@lru_cache(maxsize=1)
+def _resolve_ffprobe_binary() -> str | None:
+    for binary in _ffprobe_command_candidates():
+        path_candidate = Path(binary)
+        if path_candidate.exists():
+            return str(path_candidate)
+
+        if shutil.which(binary) is not None:
+            return binary
+
+    return None
+
+
+def _duration_cache_key(media_path: Path, file_size: int, file_mtime_ns: int) -> str:
+    try:
+        resolved = str(media_path.resolve())
+    except OSError:
+        resolved = str(media_path)
+
+    return f"{resolved}|{int(file_size)}|{int(file_mtime_ns)}"
+
+
+def _probe_media_duration_seconds(
+    media_path: Path,
+    *,
+    file_size: int | None = None,
+    file_mtime_ns: int | None = None,
+) -> int | None:
+    if not media_path.exists() or not media_path.is_file():
+        return None
+
+    if file_size is None or file_mtime_ns is None:
+        try:
+            file_stat = media_path.stat()
+        except OSError:
+            return None
+
+        file_size = int(file_stat.st_size)
+        file_mtime_ns = int(file_stat.st_mtime_ns)
+
+    cache_key = _duration_cache_key(media_path, int(file_size), int(file_mtime_ns))
+    with _MEDIA_DURATION_CACHE_GUARD:
+        cached = _MEDIA_DURATION_CACHE.get(cache_key)
+    if isinstance(cached, int):
+        return cached
+
+    ffprobe_binary = _resolve_ffprobe_binary()
+    if not ffprobe_binary:
+        return None
+
+    command = [
+        ffprobe_binary,
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(media_path),
+    ]
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    raw_duration = str(result.stdout).strip()
+    if not raw_duration:
+        return None
+
+    try:
+        parsed_duration = float(raw_duration)
+    except ValueError:
+        return None
+
+    if parsed_duration <= 0:
+        return None
+
+    duration_seconds = max(1, int(round(parsed_duration)))
+    with _MEDIA_DURATION_CACHE_GUARD:
+        if len(_MEDIA_DURATION_CACHE) >= _MEDIA_DURATION_CACHE_MAX_ENTRIES:
+            _MEDIA_DURATION_CACHE.clear()
+        _MEDIA_DURATION_CACHE[cache_key] = duration_seconds
+
+    return duration_seconds
 
 
 def _resolve_ffmpeg_binary() -> str | None:
@@ -1056,6 +1275,11 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
                     if recording_start_utc_ms is None:
                         recording_start_utc_ms = recorded_at_utc_ms if recorded_at_utc_ms > 0 else None
                     recording_end_utc_ms = int(file_stat.st_mtime * 1000)
+                    media_duration_seconds = _probe_media_duration_seconds(
+                        recording_file,
+                        file_size=int(file_stat.st_size),
+                        file_mtime_ns=int(file_stat.st_mtime_ns),
+                    )
 
                     record = {
                         "channel": channel_name,
@@ -1073,6 +1297,7 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
                         "started_at": started_at,
                         "recording_start_utc_ms": recording_start_utc_ms,
                         "recording_end_utc_ms": recording_end_utc_ms,
+                        "media_duration_seconds": media_duration_seconds,
                         "pid": None if active_info is None else active_info.get("pid"),
                         "chat_enabled": chat_enabled,
                         "chat_available": _chat_sidecar_has_messages(chat_sidecar_path),
@@ -1117,13 +1342,21 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
             else None
         )
         size_bytes = 0
+        size_mtime_ns = 0
         recording_end_utc_ms = recorded_at_utc_ms
         try:
             active_stat = active_path.stat()
             size_bytes = int(active_stat.st_size)
+            size_mtime_ns = int(active_stat.st_mtime_ns)
             recording_end_utc_ms = int(active_stat.st_mtime * 1000)
         except OSError:
             pass
+
+        media_duration_seconds = _probe_media_duration_seconds(
+            active_path,
+            file_size=size_bytes,
+            file_mtime_ns=size_mtime_ns,
+        )
 
         recording_start_utc_ms = _iso_to_utc_ms(started_at_iso)
         if recording_start_utc_ms is None:
@@ -1150,6 +1383,7 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
                 "started_at": started_at_iso,
                 "recording_start_utc_ms": recording_start_utc_ms,
                 "recording_end_utc_ms": recording_end_utc_ms,
+                "media_duration_seconds": media_duration_seconds,
                 "pid": active_info.get("pid"),
                 "chat_enabled": chat_enabled,
                 "chat_available": _chat_sidecar_has_messages(chat_sidecar_path),
@@ -1394,6 +1628,7 @@ def settings() -> str:
         active_recordings=dashboard_state["active_recordings"],
         auto_status=dashboard_state["auto_status"],
         display_timezone=dashboard_state["display_timezone"],
+        timezone_options=_display_timezone_options(),
         dashboard_signature=dashboard_state["dashboard_signature"],
         pushover_configured=pushover_configured,
         cache_summary=cache_summary,
@@ -1512,6 +1747,8 @@ def view_recording(recording_slug: str) -> object:
     if canonical_slug and requested_slug != canonical_slug:
         return redirect(url_for("dashboard.view_recording", recording_slug=canonical_slug), code=302)
 
+    previous_recording, next_recording = _channel_recording_neighbors(catalog, record)
+
     # Visiting a completed TS recording should enqueue the same persistent queue job
     # that continues even if the client leaves the page.
     if not bool(record.get("is_live", False)):
@@ -1533,6 +1770,8 @@ def view_recording(recording_slug: str) -> object:
     return render_template(
         "video_detail.html",
         recording=record,
+        previous_recording=previous_recording,
+        next_recording=next_recording,
         live_edge_offset_seconds=live_buffer_default,
         live_buffer_default_seconds=live_buffer_default,
         live_buffer_min_seconds=live_buffer_min,

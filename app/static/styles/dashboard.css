@@ -23,6 +23,38 @@
     margin: 10px 0 12px;
 }
 
+.timezone-form {
+    align-items: start;
+}
+
+.timezone-picker {
+    position: relative;
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+}
+
+.timezone-search,
+.timezone-select {
+    width: 100%;
+}
+
+.timezone-select {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 25;
+    min-height: 230px;
+    max-height: 360px;
+    font-family: Consolas, "Courier New", monospace;
+}
+
+.timezone-picker.is-open .timezone-select {
+    display: block;
+}
+
 .notification-form {
     display: grid;
     grid-template-columns: minmax(120px, 1fr) repeat(4, minmax(120px, 1fr)) auto;

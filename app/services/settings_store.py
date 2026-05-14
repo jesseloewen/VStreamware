@@ -3,6 +3,7 @@ import threading
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfoNotFoundError
 
 
 class SettingsStore:
@@ -55,10 +56,29 @@ class SettingsStore:
 
         try:
             ZoneInfo(normalized)
-        except Exception:
+        except (ZoneInfoNotFoundError, ValueError):
             return SettingsStore.DISPLAY_TIMEZONE_AUTO
 
         return normalized
+
+    @staticmethod
+    def _validate_display_timezone(value: Any) -> tuple[bool, str, str]:
+        if not isinstance(value, str):
+            return False, SettingsStore.DISPLAY_TIMEZONE_AUTO, "Display timezone is required."
+
+        normalized = value.strip()
+        if not normalized:
+            return False, SettingsStore.DISPLAY_TIMEZONE_AUTO, "Display timezone is required."
+
+        if normalized.lower() == SettingsStore.DISPLAY_TIMEZONE_AUTO:
+            return True, SettingsStore.DISPLAY_TIMEZONE_AUTO, ""
+
+        try:
+            ZoneInfo(normalized)
+        except (ZoneInfoNotFoundError, ValueError):
+            return False, SettingsStore.DISPLAY_TIMEZONE_AUTO, f"Unsupported timezone: {normalized}."
+
+        return True, normalized, ""
 
     @staticmethod
     def _normalize_saved_channel(
@@ -249,7 +269,10 @@ class SettingsStore:
             return False, f"{normalized} is not in the channel list."
 
     def set_display_timezone(self, timezone_name: str) -> tuple[bool, str]:
-        normalized_timezone = self._normalize_display_timezone(timezone_name)
+        is_valid, normalized_timezone, error_message = self._validate_display_timezone(timezone_name)
+        if not is_valid:
+            return False, error_message
+
         with self._lock:
             self._settings["display_timezone"] = normalized_timezone
             self._save_settings()

@@ -46,6 +46,7 @@ It provides:
 - Streamlink
 - FFmpeg
 - python-dotenv
+- tzdata (IANA timezone database for Python zoneinfo)
 
 ## Quick Start
 
@@ -77,6 +78,9 @@ source .venv/bin/activate
 ```bash
 pip install -r requirements.txt
 ```
+
+`tzdata` is included in `requirements.txt` so timezone selections like `America/New_York`
+validate consistently across platforms, including Windows.
 
 ### 4. Configure environment variables
 

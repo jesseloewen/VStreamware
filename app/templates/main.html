@@ -197,6 +197,82 @@
                 return `${minutes}:${String(seconds).padStart(2, '0')}`;
             };
 
+            const resolveDisplayTimezone = () => {
+                if (typeof displayTimezonePreference === 'string' && displayTimezonePreference && displayTimezonePreference !== 'auto') {
+                    return displayTimezonePreference;
+                }
+
+                try {
+                    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+                } catch (_error) {
+                    return undefined;
+                }
+            };
+
+            const resolveRecordingDate = (recording) => {
+                const recordedAtValue = typeof recording.recorded_at === 'string' ? recording.recorded_at.trim() : '';
+                if (recordedAtValue) {
+                    const parsedIso = new Date(recordedAtValue);
+                    if (!Number.isNaN(parsedIso.getTime())) {
+                        return parsedIso;
+                    }
+                }
+
+                const unixSeconds = Number(recording.recorded_at_unix);
+                if (Number.isFinite(unixSeconds) && unixSeconds > 0) {
+                    const parsedUnix = new Date(unixSeconds * 1000);
+                    if (!Number.isNaN(parsedUnix.getTime())) {
+                        return parsedUnix;
+                    }
+                }
+
+                const startUtcMs = Number(recording.recording_start_utc_ms);
+                if (Number.isFinite(startUtcMs) && startUtcMs > 0) {
+                    const parsedStart = new Date(startUtcMs);
+                    if (!Number.isNaN(parsedStart.getTime())) {
+                        return parsedStart;
+                    }
+                }
+
+                return null;
+            };
+
+            const formatDayKeyForDisplayTimezone = (date) => {
+                if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+                    return 'unknown';
+                }
+
+                const timezone = resolveDisplayTimezone();
+                const formatterOptions = {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                };
+
+                if (timezone) {
+                    formatterOptions.timeZone = timezone;
+                }
+
+                try {
+                    const parts = new Intl.DateTimeFormat('en-CA', formatterOptions).formatToParts(date);
+                    const year = parts.find((part) => part.type === 'year')?.value;
+                    const month = parts.find((part) => part.type === 'month')?.value;
+                    const day = parts.find((part) => part.type === 'day')?.value;
+                    if (year && month && day) {
+                        return `${year}-${month}-${day}`;
+                    }
+                } catch (_error) {
+                    // Fallback below.
+                }
+
+                return date.toISOString().slice(0, 10);
+            };
+
+            const deriveRecordingDay = (recording) => {
+                const date = resolveRecordingDate(recording);
+                return formatDayKeyForDisplayTimezone(date);
+            };
+
             const formatDateTime = (isoString, unixSeconds) => {
                 let date = null;
                 if (typeof isoString === 'string' && isoString.trim()) {
@@ -214,16 +290,7 @@
                     return 'Unknown';
                 }
 
-                let timezone;
-                if (typeof displayTimezonePreference === 'string' && displayTimezonePreference && displayTimezonePreference !== 'auto') {
-                    timezone = displayTimezonePreference;
-                } else {
-                    try {
-                        timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                    } catch (_error) {
-                        timezone = undefined;
-                    }
-                }
+                const timezone = resolveDisplayTimezone();
 
                 try {
                     return date.toLocaleString(undefined, timezone ? { timeZone: timezone } : undefined);
@@ -337,13 +404,7 @@
                 const liveBadge = recording.is_live ? '<span class="badge live">LIVE</span>' : '<span class="badge neutral">Recorded</span>';
                 const thumbnailUrl = escapeHtml(recording.thumbnail_url || fallbackThumbUrl);
                 const viewUrl = escapeHtml(String(recording.view_url || '#'));
-                const recordingStartUtcMs = Number(recording.recording_start_utc_ms) || 0;
-                const recordingEndUtcMs = recording.is_live
-                    ? Date.now()
-                    : (Number(recording.recording_end_utc_ms) || 0);
-                const durationSeconds = recordingStartUtcMs > 0 && recordingEndUtcMs > recordingStartUtcMs
-                    ? Math.floor((recordingEndUtcMs - recordingStartUtcMs) / 1000)
-                    : 0;
+                const durationSeconds = Number(recording.media_duration_seconds) || 0;
                 const durationLabel = formatDuration(durationSeconds);
 
                 return `
@@ -415,6 +476,31 @@
                 }).join('');
             };
 
+            const buildChannelDaysFromRecordings = (recordings) => {
+                const groupedDays = {};
+
+                for (const recording of recordings) {
+                    const channel = String(recording.channel || '').trim();
+                    if (!channel) {
+                        continue;
+                    }
+
+                    const day = String(recording.day || 'unknown').trim() || 'unknown';
+                    if (!groupedDays[channel]) {
+                        groupedDays[channel] = new Set();
+                    }
+
+                    groupedDays[channel].add(day);
+                }
+
+                const payload = {};
+                for (const [channel, days] of Object.entries(groupedDays)) {
+                    payload[channel] = Array.from(days).sort((left, right) => right.localeCompare(left));
+                }
+
+                return payload;
+            };
+
             const renderVideoLists = () => {
                 if (!liveVideoList || !recordedVideoList || !liveVideoEmpty || !recordedVideoEmpty) {
                     return;
@@ -444,7 +530,7 @@
                 const recordings = Array.isArray(payload.recordings) ? payload.recordings : [];
                 allRecordings = recordings.map((item) => ({
                     channel: String(item.channel || ''),
-                    day: String(item.day || ''),
+                    day: deriveRecordingDay(item),
                     file_name: String(item.file_name || ''),
                     display_title: String(item.display_title || ''),
                     relative_path: String(item.relative_path || ''),
@@ -460,11 +546,10 @@
                     started_at: item.started_at ? String(item.started_at) : '',
                     recording_start_utc_ms: Number(item.recording_start_utc_ms) || 0,
                     recording_end_utc_ms: Number(item.recording_end_utc_ms) || 0,
+                    media_duration_seconds: Number(item.media_duration_seconds) || 0,
                 }));
 
-                channelDays = (payload.channel_days && typeof payload.channel_days === 'object')
-                    ? payload.channel_days
-                    : {};
+                channelDays = buildChannelDaysFromRecordings(allRecordings);
 
                 populateChannelOptions(Array.isArray(payload.channels) ? payload.channels : []);
                 populateDayOptions();

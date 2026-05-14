@@ -75,20 +75,34 @@
                 <section class="card">
                     <h2>Display Timezone</h2>
                     <p class="muted">Backend timestamps are stored in UTC. Choose how times are rendered in the UI.</p>
-                    <form action="{{ url_for('dashboard.set_display_timezone') }}" method="post" class="row-form start-only">
-                        <select id="display-timezone" name="display_timezone">
-                            <option value="auto" {% if display_timezone == 'auto' %}selected{% endif %}>Auto (browser timezone)</option>
-                            <option value="UTC" {% if display_timezone == 'UTC' %}selected{% endif %}>UTC</option>
-                            <option value="America/New_York" {% if display_timezone == 'America/New_York' %}selected{% endif %}>America/New_York</option>
-                            <option value="America/Chicago" {% if display_timezone == 'America/Chicago' %}selected{% endif %}>America/Chicago</option>
-                            <option value="America/Denver" {% if display_timezone == 'America/Denver' %}selected{% endif %}>America/Denver</option>
-                            <option value="America/Los_Angeles" {% if display_timezone == 'America/Los_Angeles' %}selected{% endif %}>America/Los_Angeles</option>
-                            <option value="Europe/London" {% if display_timezone == 'Europe/London' %}selected{% endif %}>Europe/London</option>
-                            <option value="Europe/Berlin" {% if display_timezone == 'Europe/Berlin' %}selected{% endif %}>Europe/Berlin</option>
-                            <option value="Asia/Tokyo" {% if display_timezone == 'Asia/Tokyo' %}selected{% endif %}>Asia/Tokyo</option>
-                        </select>
+                    <form action="{{ url_for('dashboard.set_display_timezone') }}" method="post" class="row-form timezone-form">
+                        <div class="timezone-picker">
+                            <label class="sr-only" for="display-timezone-input">Search timezone options</label>
+                            <input
+                                id="display-timezone-input"
+                                class="timezone-search"
+                                type="search"
+                                name="display_timezone"
+                                value="{{ display_timezone }}"
+                                placeholder="Filter timezone list (example: york, berlin, tokyo)"
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+                            <select
+                                id="display-timezone-options"
+                                class="timezone-select"
+                                size="10"
+                                aria-label="Display timezone options"
+                            >
+                                <option value="auto" {% if display_timezone == 'auto' %}selected{% endif %}>Auto (browser/client timezone)</option>
+                                {% for timezone_name in timezone_options %}
+                                    <option value="{{ timezone_name }}" {% if display_timezone == timezone_name %}selected{% endif %}>{{ timezone_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                         <button type="submit" class="secondary">Save</button>
                     </form>
+                    <p class="muted">Click into the edit box to open the dropdown list. Selecting an item fills the edit box.</p>
                 </section>
 
                 <section class="card">
@@ -243,6 +257,136 @@
             };
 
             hydrateUtcDateTimes();
+
+            const timezonePickerElement = document.querySelector('.timezone-picker');
+            const timezoneEditInput = document.getElementById('display-timezone-input');
+            const timezoneSelectElement = document.getElementById('display-timezone-options');
+
+            if (
+                timezonePickerElement instanceof HTMLElement
+                && timezoneEditInput instanceof HTMLInputElement
+                && timezoneSelectElement instanceof HTMLSelectElement
+            ) {
+                const timezoneOptions = Array.from(timezoneSelectElement.options).map((option) => ({
+                    value: String(option.value || ''),
+                    label: String(option.textContent || option.value || ''),
+                }));
+                const pinnedTimezoneValues = new Set(['auto']);
+                const normalizeTimezoneText = (value) => String(value || '').trim().toLowerCase();
+                const openTimezoneDropdown = () => {
+                    timezonePickerElement.classList.add('is-open');
+                };
+
+                const closeTimezoneDropdown = () => {
+                    timezonePickerElement.classList.remove('is-open');
+                };
+
+                const renderTimezoneOptions = (rawQuery, preferredValue = '') => {
+                    const query = normalizeTimezoneText(rawQuery);
+                    const currentSelection = String(preferredValue || timezoneSelectElement.value || '');
+                    timezoneSelectElement.innerHTML = '';
+
+                    for (const option of timezoneOptions) {
+                        const value = String(option.value || '');
+                        const label = String(option.label || value);
+                        const normalizedLabel = normalizeTimezoneText(label);
+                        const normalizedValue = normalizeTimezoneText(value);
+                        const isPinned = pinnedTimezoneValues.has(normalizedValue);
+                        const matches = !query || normalizedLabel.includes(query) || normalizedValue.includes(query);
+
+                        if (!isPinned && !matches) {
+                            continue;
+                        }
+
+                        const nextOption = document.createElement('option');
+                        nextOption.value = value;
+                        nextOption.textContent = label;
+                        timezoneSelectElement.appendChild(nextOption);
+                    }
+
+                    const availableValues = new Set(Array.from(timezoneSelectElement.options).map((option) => String(option.value || '')));
+                    const resolvedPreferredValue = currentSelection
+                        || (displayTimezonePreference === 'auto' ? 'auto' : String(displayTimezonePreference || 'auto'));
+                    timezoneSelectElement.value = availableValues.has(resolvedPreferredValue)
+                        ? resolvedPreferredValue
+                        : (timezoneSelectElement.options[0] ? String(timezoneSelectElement.options[0].value || '') : 'auto');
+                };
+
+                const applyTimezoneSelection = () => {
+                    const selectedValue = String(timezoneSelectElement.value || '').trim();
+                    if (!selectedValue) {
+                        return;
+                    }
+
+                    timezoneEditInput.value = selectedValue;
+                };
+
+                renderTimezoneOptions('', timezoneEditInput.value);
+
+                timezoneEditInput.addEventListener('focus', () => {
+                    renderTimezoneOptions('', timezoneEditInput.value);
+                    openTimezoneDropdown();
+                });
+
+                timezoneEditInput.addEventListener('click', () => {
+                    renderTimezoneOptions('', timezoneEditInput.value);
+                    openTimezoneDropdown();
+                });
+
+                timezoneEditInput.addEventListener('input', () => {
+                    renderTimezoneOptions(timezoneEditInput.value, timezoneEditInput.value);
+                    openTimezoneDropdown();
+                });
+
+                timezoneEditInput.addEventListener('keydown', (event) => {
+                    if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        openTimezoneDropdown();
+                        timezoneSelectElement.focus();
+                    }
+
+                    if (event.key === 'Escape') {
+                        closeTimezoneDropdown();
+                    }
+                });
+
+                timezoneSelectElement.addEventListener('change', () => {
+                    applyTimezoneSelection();
+                    closeTimezoneDropdown();
+                });
+
+                timezoneSelectElement.addEventListener('dblclick', () => {
+                    applyTimezoneSelection();
+                    closeTimezoneDropdown();
+                });
+
+                timezoneSelectElement.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        applyTimezoneSelection();
+                        closeTimezoneDropdown();
+                        timezoneEditInput.focus();
+                    }
+
+                    if (event.key === 'Escape') {
+                        closeTimezoneDropdown();
+                        timezoneEditInput.focus();
+                    }
+                });
+
+                document.addEventListener('mousedown', (event) => {
+                    const target = event.target;
+                    if (!(target instanceof Node)) {
+                        return;
+                    }
+
+                    if (timezonePickerElement.contains(target)) {
+                        return;
+                    }
+
+                    closeTimezoneDropdown();
+                });
+            }
 
             const syncStatusElement = document.getElementById('live-sync-status');
             const statusUrl = "{{ url_for('dashboard.status') }}";
