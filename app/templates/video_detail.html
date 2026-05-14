@@ -379,6 +379,7 @@
             const sharedPanelOverlay = document.getElementById('panel-overlay');
             const displayTimezonePreference = {{ display_timezone | tojson }};
             let isLive = {{ 'true' if recording.is_live else 'false' }};
+            const recordingViewSlug = {{ recording.view_slug | tojson }};
             const chatUrl = {{ recording.chat_url | tojson }};
             const recordingSizeUrl = {{ url_for('dashboard.recording_size', recording_slug=recording.view_slug) | tojson }};
             const recordingTranscodeStatusUrl = {{ recording.transcode_status_url | tojson }};
@@ -434,6 +435,7 @@
             const chatSyncSourceStorageKey = 'vstreamware.chat-sync-source';
             const playbackSpeedStorageKey = 'vstreamware.playback-speed';
             const autoplayNextStorageKey = 'vstreamware.autoplay-next-enabled';
+            const playbackResumeStorageKeyPrefix = 'vstreamware.playback-resume.';
             const playerVolumeStorageKey = 'vstreamware.player-volume';
             const playerMutedStorageKey = 'vstreamware.player-muted';
             const fullscreenChatModeStorageKey = 'vstreamware.fullscreen-chat-mode';
@@ -466,6 +468,8 @@
             const holdBoostDelayMs = 320;
             const holdBoostMoveTolerancePx = 22;
             const playerSeekStepSeconds = 0.1;
+            const playbackResumeSaveIntervalMs = 5000;
+            const playbackResumeNearEndRatio = 0.95;
             let inDvrMode = false;
             let chatSyncSource = 'playback';
             let highlightedInputTimer = null;
@@ -484,6 +488,8 @@
             let seekGestureTimer = null;
             let autoplayNextEnabled = true;
             let hasPendingRecordingNavigation = false;
+            let lastPlaybackResumeSavedAt = 0;
+            let playbackResumeRestoreAttempted = false;
             let lastTouchTapAt = 0;
             let lastTouchTapSide = '';
             let lastTouchTapX = 0;
@@ -1768,9 +1774,92 @@
                     return false;
                 }
 
+                persistCurrentPlaybackResume(true);
                 hasPendingRecordingNavigation = true;
                 window.location.assign(nextUrl);
                 return true;
+            };
+
+            const playbackResumeStorageKey = () => {
+                const slug = String(recordingViewSlug || '').trim();
+                if (!slug) {
+                    return '';
+                }
+
+                return `${playbackResumeStorageKeyPrefix}${slug}`;
+            };
+
+            const readPersistedPlaybackResume = () => {
+                const storageKey = playbackResumeStorageKey();
+                if (!storageKey) {
+                    return null;
+                }
+
+                try {
+                    const raw = window.localStorage.getItem(storageKey);
+                    if (!raw) {
+                        return null;
+                    }
+
+                    const parsed = JSON.parse(raw);
+                    if (typeof parsed === 'number' && Number.isFinite(parsed)) {
+                        const positionSeconds = Math.max(0, Number(parsed));
+                        return {
+                            playback_mode: 'recorded',
+                            position_seconds: positionSeconds,
+                            target_utc_ms: null,
+                            duration_seconds: null,
+                            saved_at_ms: null,
+                        };
+                    }
+
+                    if (!parsed || typeof parsed !== 'object') {
+                        return null;
+                    }
+
+                    const modeRaw = String(parsed.playback_mode || '').trim().toLowerCase();
+                    const playbackMode = modeRaw === 'live-dvr' || modeRaw === 'live-direct' ? modeRaw : 'recorded';
+                    const positionSecondsRaw = Number(parsed.position_seconds);
+                    const targetUtcMsRaw = Number(parsed.target_utc_ms);
+                    const durationSecondsRaw = Number(parsed.duration_seconds);
+                    const savedAtMsRaw = Number(parsed.saved_at_ms);
+
+                    return {
+                        playback_mode: playbackMode,
+                        position_seconds: Number.isFinite(positionSecondsRaw) ? Math.max(0, positionSecondsRaw) : null,
+                        target_utc_ms: Number.isFinite(targetUtcMsRaw) ? Math.max(0, Math.round(targetUtcMsRaw)) : null,
+                        duration_seconds: Number.isFinite(durationSecondsRaw) ? Math.max(0, durationSecondsRaw) : null,
+                        saved_at_ms: Number.isFinite(savedAtMsRaw) ? Math.max(0, Math.round(savedAtMsRaw)) : null,
+                    };
+                } catch (_error) {
+                    return null;
+                }
+            };
+
+            const clearPersistedPlaybackResume = () => {
+                const storageKey = playbackResumeStorageKey();
+                if (!storageKey) {
+                    return;
+                }
+
+                try {
+                    window.localStorage.removeItem(storageKey);
+                } catch (_error) {
+                    // Ignore storage failures.
+                }
+            };
+
+            const persistPlaybackResumePayload = (payload) => {
+                const storageKey = playbackResumeStorageKey();
+                if (!storageKey || !payload || typeof payload !== 'object') {
+                    return;
+                }
+
+                try {
+                    window.localStorage.setItem(storageKey, JSON.stringify(payload));
+                } catch (_error) {
+                    // Ignore storage failures.
+                }
             };
 
             const setSeekIndicatorVisible = (indicator, visible) => {
@@ -2338,6 +2427,134 @@
                 return Number(recordingStartUtcMs) + playbackPositionMs;
             };
 
+            const computePlaybackTargetUtcMs = () => {
+                if (!player) {
+                    return null;
+                }
+
+                if (isLive && !inDvrMode) {
+                    return Date.now() - (Math.max(liveOffsetSeconds, 0) * 1000);
+                }
+
+                if (!Number.isFinite(recordingStartUtcMs)) {
+                    return null;
+                }
+
+                const playbackPositionMs = Math.round(Math.max(player.currentTime, 0) * 1000);
+                return Number(recordingStartUtcMs) + playbackPositionMs;
+            };
+
+            const isNearRecordedEnd = (seconds, mediaEnd) => {
+                if (isLive || !Number.isFinite(mediaEnd) || mediaEnd <= 0) {
+                    return false;
+                }
+
+                if (!Number.isFinite(seconds) || seconds <= 0) {
+                    return false;
+                }
+
+                return (seconds / mediaEnd) >= playbackResumeNearEndRatio;
+            };
+
+            const persistCurrentPlaybackResume = (force = false) => {
+                if (!player || isAwaitingAnySourceReady()) {
+                    return;
+                }
+
+                const now = Date.now();
+                if (!force && now - lastPlaybackResumeSavedAt < playbackResumeSaveIntervalMs) {
+                    return;
+                }
+
+                const currentSeconds = Number.isFinite(player.currentTime) ? Math.max(player.currentTime, 0) : 0;
+                const mediaEnd = getMediaEnd();
+                if (!isLive && isNearRecordedEnd(currentSeconds, mediaEnd)) {
+                    clearPersistedPlaybackResume();
+                    lastPlaybackResumeSavedAt = now;
+                    return;
+                }
+
+                const playbackMode = isLive ? (inDvrMode ? 'live-dvr' : 'live-direct') : 'recorded';
+                const targetUtcMs = computePlaybackTargetUtcMs();
+                persistPlaybackResumePayload({
+                    playback_mode: playbackMode,
+                    position_seconds: Math.round(currentSeconds * 10) / 10,
+                    target_utc_ms: Number.isFinite(targetUtcMs) ? Math.round(targetUtcMs) : null,
+                    duration_seconds: Number.isFinite(mediaEnd) && mediaEnd > 0 ? Math.round(mediaEnd * 10) / 10 : null,
+                    saved_at_ms: now,
+                });
+
+                lastPlaybackResumeSavedAt = now;
+            };
+
+            const restorePlaybackResumeIfAvailable = () => {
+                const payload = readPersistedPlaybackResume();
+                if (!payload || !player) {
+                    return true;
+                }
+
+                if (isLive) {
+                    if (payload.playback_mode !== 'live-dvr') {
+                        return true;
+                    }
+
+                    const targetUtcMs = Number(payload.target_utc_ms);
+                    if (!Number.isFinite(targetUtcMs) || !Number.isFinite(recordingStartUtcMs)) {
+                        return true;
+                    }
+
+                    const mediaEnd = getMediaEnd();
+                    let desiredTime = Math.max((targetUtcMs - Number(recordingStartUtcMs)) / 1000, 0);
+                    if (!Number.isFinite(desiredTime)) {
+                        return true;
+                    }
+
+                    if (Number.isFinite(mediaEnd) && mediaEnd > 0) {
+                        desiredTime = Math.max(0, Math.min(desiredTime, Math.max(mediaEnd - 0.2, 0)));
+                    }
+
+                    if (desiredTime <= 0.2) {
+                        return true;
+                    }
+
+                    switchToDvrMode(desiredTime, {
+                        forcePlay: true,
+                        autoReturnToLiveOnCatchUp: false,
+                    });
+                    return true;
+                }
+
+                const mediaEnd = getMediaEnd();
+                if (!Number.isFinite(mediaEnd) || mediaEnd <= 0) {
+                    return false;
+                }
+
+                let desiredTime = Number(payload.position_seconds);
+                if (!Number.isFinite(desiredTime) && Number.isFinite(payload.target_utc_ms) && Number.isFinite(recordingStartUtcMs)) {
+                    desiredTime = (Number(payload.target_utc_ms) - Number(recordingStartUtcMs)) / 1000;
+                }
+
+                if (!Number.isFinite(desiredTime) || desiredTime <= 1) {
+                    return true;
+                }
+
+                desiredTime = Math.max(0, Math.min(desiredTime, Math.max(mediaEnd - 0.2, 0)));
+                if (isNearRecordedEnd(desiredTime, mediaEnd)) {
+                    clearPersistedPlaybackResume();
+                    return true;
+                }
+
+                try {
+                    player.currentTime = desiredTime;
+                } catch (_error) {
+                    return false;
+                }
+
+                updatePlayerTimelineUi();
+                void syncChatTimeline(liveOffsetSeconds, true);
+                return true;
+            };
+
             let chatSyncInFlight = false;
             let chatPollTimer = null;
             let lastChatSyncAt = 0;
@@ -2473,7 +2690,7 @@
             player.volume = persistedPlayerVolume;
             player.muted = persistedPlayerMuted || persistedPlayerVolume <= 0;
             player.defaultMuted = player.muted;
-            player.autoplay = isLive;
+            player.autoplay = true;
             player.controls = false;
 
             updateRecordingNavigationUi();
@@ -3385,6 +3602,10 @@
                     if (typeof onReady === 'function') {
                         onReady(wasPaused);
                     }
+
+                    if (!playbackResumeRestoreAttempted) {
+                        playbackResumeRestoreAttempted = restorePlaybackResumeIfAvailable();
+                    }
                 };
 
                 player.addEventListener('loadedmetadata', handleReady, { once: true });
@@ -4080,7 +4301,9 @@
                     }
 
                     const recordedSource = buildRecordedMediaSource();
-                    const loaded = loadSource(recordedSource);
+                    const loaded = loadSource(recordedSource, () => {
+                        tryPlay();
+                    });
                     if (!loaded) {
                         setTranscodeOverlayState({
                             visible: true,
@@ -4117,6 +4340,7 @@
                     lastProgressAt = Date.now();
                 }
                 lastProgressTime = player.currentTime;
+                persistCurrentPlaybackResume();
 
                 if (isLive && !inDvrMode) {
                     maybeAutoRefreshLive();
@@ -4137,11 +4361,13 @@
             player.addEventListener('seeked', () => {
                 updatePlayerTimelineUi();
                 void syncChatTimeline(liveOffsetSeconds, true);
+                persistCurrentPlaybackResume(true);
             });
 
             player.addEventListener('pause', () => {
                 updateCustomPlayerUi();
                 void syncChatTimeline(liveOffsetSeconds, true);
+                persistCurrentPlaybackResume(true);
             });
 
             player.addEventListener('waiting', () => {
@@ -4173,7 +4399,10 @@
                         });
                     }
                 } else if (autoplayNextEnabled && navigateToRecording(nextRecordingUrl)) {
+                    clearPersistedPlaybackResume();
                     return;
+                } else if (!isLive) {
+                    clearPersistedPlaybackResume();
                 }
 
                 updateCustomPlayerUi();
@@ -4322,6 +4551,14 @@
             window.addEventListener('blur', () => {
                 deactivateHoldBoost();
                 resetTouchTapState();
+            });
+
+            window.addEventListener('pagehide', () => {
+                persistCurrentPlaybackResume(true);
+            });
+
+            window.addEventListener('beforeunload', () => {
+                persistCurrentPlaybackResume(true);
             });
 
             if (isLive) {
