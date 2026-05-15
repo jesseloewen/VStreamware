@@ -1,5 +1,32 @@
-﻿.browser-page-main .browser-layout {
-    min-height: 0;
+﻿.browser-page-main .container {
+    display: flex;
+    flex-direction: column;
+}
+
+.browser-page-main .browser-layout {
+    flex: 1 1 auto;
+    min-height: calc(100dvh - 200px);
+}
+
+@media (min-width: 1121px) {
+    .browser-page-main .browser-layout {
+        align-items: stretch;
+    }
+
+    .browser-page-main .browser-main-column {
+        min-height: 0;
+        align-content: stretch;
+    }
+
+    .browser-page-main .browser-layout > .side-panel .panel-shell {
+        height: 100%;
+        max-height: var(--saved-panel-viewport-max-height, 100%);
+    }
+
+    .browser-page-main .video-browser-card {
+        min-height: 100%;
+        align-content: start;
+    }
 }
 
 .video-browser-card {

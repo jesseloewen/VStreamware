@@ -110,6 +110,28 @@
                                             <span class="video-gesture-hint is-forward" id="video-gesture-forward" hidden>+10s</span>
                                             <span class="video-gesture-hint is-hold" id="video-gesture-hold" hidden>2x</span>
                                         </div>
+                                        <button
+                                            type="button"
+                                            id="player-previous-recording"
+                                            class="video-control-button video-icon-button video-nav-button video-side-nav-button is-prev"
+                                            data-target-url="{{ previous_recording.view_url if previous_recording else '' }}"
+                                            aria-label="{% if previous_recording %}Play previous video: {{ previous_recording.display_title }}{% else %}No previous video{% endif %}"
+                                            {% if not previous_recording %}disabled{% endif %}
+                                        >
+                                            <svg class="video-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+                                            <span class="sr-only">Previous video</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            id="player-next-recording"
+                                            class="video-control-button video-icon-button video-nav-button video-side-nav-button is-next"
+                                            data-target-url="{{ next_recording.view_url if next_recording else '' }}"
+                                            aria-label="{% if next_recording %}Play next video: {{ next_recording.display_title }}{% else %}No next video{% endif %}"
+                                            {% if not next_recording %}disabled{% endif %}
+                                        >
+                                            <svg class="video-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+                                            <span class="sr-only">Next video</span>
+                                        </button>
                                     </div>
 
                                     <div class="video-player-ui" id="video-player-ui" aria-label="Video playback controls">
@@ -121,32 +143,10 @@
                                         <div class="video-player-controls" id="video-player-controls">
                                             <div class="video-controls-main-row{% if recording.is_live %} has-live-middle{% endif %}">
                                                 <div class="video-controls-left">
-                                                    <button
-                                                        type="button"
-                                                        id="player-previous-recording"
-                                                        class="video-control-button video-icon-button video-nav-button"
-                                                        data-target-url="{{ previous_recording.view_url if previous_recording else '' }}"
-                                                        aria-label="{% if previous_recording %}Play previous video: {{ previous_recording.display_title }}{% else %}No previous video{% endif %}"
-                                                        {% if not previous_recording %}disabled{% endif %}
-                                                    >
-                                                        <svg class="video-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
-                                                        <span class="sr-only">Previous video</span>
-                                                    </button>
                                                     <button type="button" id="player-play-toggle" class="video-control-button video-icon-button" aria-label="Pause video">
                                                         <svg class="video-icon-svg" data-icon-name="play" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
                                                         <svg class="video-icon-svg" data-icon-name="pause" viewBox="0 0 24 24" aria-hidden="true" hidden fill="currentColor" stroke="none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                                                         <span class="sr-only">Pause</span>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        id="player-next-recording"
-                                                        class="video-control-button video-icon-button video-nav-button"
-                                                        data-target-url="{{ next_recording.view_url if next_recording else '' }}"
-                                                        aria-label="{% if next_recording %}Play next video: {{ next_recording.display_title }}{% else %}No next video{% endif %}"
-                                                        {% if not next_recording %}disabled{% endif %}
-                                                    >
-                                                        <svg class="video-icon-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
-                                                        <span class="sr-only">Next video</span>
                                                     </button>
                                                 </div>
                                                 <div class="video-progress-row">
@@ -214,14 +214,6 @@
                                                             <span class="sr-only">Playback settings</span>
                                                         </button>
                                                         <div id="player-settings-panel" class="playback-speed-control playback-speed-popover" role="group" aria-label="Playback settings" hidden>
-                                                            <div class="video-autoplay-setting">
-                                                                <span class="video-autoplay-text">Autoplay next</span>
-                                                                <label class="toggle-switch video-autoplay-toggle" for="autoplay-next-toggle">
-                                                                    <input id="autoplay-next-toggle" type="checkbox" role="switch" aria-checked="true" aria-label="Autoplay next recording when current video ends" checked>
-                                                                    <span class="toggle-slider" aria-hidden="true"></span>
-                                                                    <span id="autoplay-next-label" class="toggle-label">On</span>
-                                                                </label>
-                                                            </div>
                                                             <div class="playback-speed-options" role="group" aria-label="Playback speed presets">
                                                                 <button type="button" class="playback-speed-option" data-playback-speed="3" aria-label="Set playback speed to 3x">3x</button>
                                                                 <button type="button" class="playback-speed-option" data-playback-speed="2.5" aria-label="Set playback speed to 2.5x">2.5x</button>
@@ -313,6 +305,131 @@
                         </aside>
                     {% endif %}
                 </div>
+
+                {% if recording.can_play %}
+                    <div class="video-nav-controls-row" aria-label="Playback queue settings">
+                        <div class="video-autoplay-setting video-autoplay-setting-panel">
+                            <span class="video-autoplay-text">Autoplay next</span>
+                            <label class="toggle-switch video-autoplay-toggle" for="autoplay-next-toggle">
+                                <input id="autoplay-next-toggle" type="checkbox" role="switch" aria-checked="true" aria-label="Autoplay next recording when current video ends" checked>
+                                <span class="toggle-slider" aria-hidden="true"></span>
+                                <span id="autoplay-next-label" class="toggle-label">On</span>
+                            </label>
+                        </div>
+                    </div>
+                    <section class="video-nav-section" aria-label="Previous and next videos">
+                        <div class="video-nav-grid">
+                            <section class="video-nav-slot" aria-label="Previous video">
+                                <p class="video-nav-slot-label">Previous</p>
+                                {% if previous_recording %}
+                                    {% set previous_recorded_at = previous_recording.started_at or previous_recording.recorded_at %}
+                                    <article class="video-item{% if previous_recording.is_live %} is-live{% endif %}">
+                                        <a class="video-card-link" href="{{ previous_recording.view_url }}" aria-label="Open previous video: {{ previous_recording.display_title }}">
+                                            <p class="video-channel-label">{{ previous_recording.channel if previous_recording.channel else 'unknown' }}</p>
+                                            <div class="video-thumb-wrap">
+                                                <img class="video-thumb" src="{{ previous_recording.thumbnail_url if previous_recording.thumbnail_url else recording.thumbnail_url }}" alt="{{ previous_recording.display_title }} thumbnail" loading="lazy" decoding="async">
+                                            </div>
+                                            <header class="video-item-header">
+                                                <div>
+                                                    <h4>{{ previous_recording.display_title }}</h4>
+                                                    <p class="muted">{{ previous_recording.day if previous_recording.day else 'unknown' }}</p>
+                                                </div>
+                                                <div class="video-item-badges">
+                                                    {% if previous_recording.is_live %}
+                                                        <span class="badge live">LIVE</span>
+                                                    {% else %}
+                                                        <span class="badge neutral">Recorded</span>
+                                                    {% endif %}
+                                                    {% if previous_recording.quality %}
+                                                        <span class="meta-chip">Quality {{ previous_recording.quality }}</span>
+                                                    {% endif %}
+                                                </div>
+                                            </header>
+                                            <dl class="video-meta-grid">
+                                                <div>
+                                                    <dt>Recorded</dt>
+                                                    <dd>
+                                                        {% if previous_recorded_at %}
+                                                            <span class="utc-datetime" data-utc="{{ previous_recorded_at }}">{{ previous_recorded_at }}</span>
+                                                        {% else %}
+                                                            Unknown
+                                                        {% endif %}
+                                                    </dd>
+                                                </div>
+                                                <div>
+                                                    <dt>Size</dt>
+                                                    <dd>{{ previous_recording.size_label if previous_recording.size_label else 'n/a' }}</dd>
+                                                </div>
+                                                <div>
+                                                    <dt>Length</dt>
+                                                    <dd>{{ previous_recording.duration_label if previous_recording.duration_label else 'n/a' }}</dd>
+                                                </div>
+                                            </dl>
+                                        </a>
+                                    </article>
+                                {% else %}
+                                    <article class="video-item video-nav-empty-card">
+                                        <p class="video-nav-empty-text">No previous video</p>
+                                    </article>
+                                {% endif %}
+                            </section>
+                            <section class="video-nav-slot" aria-label="Next video">
+                                <p class="video-nav-slot-label">Next</p>
+                                {% if next_recording %}
+                                    {% set next_recorded_at = next_recording.started_at or next_recording.recorded_at %}
+                                    <article class="video-item{% if next_recording.is_live %} is-live{% endif %}">
+                                        <a class="video-card-link" href="{{ next_recording.view_url }}" aria-label="Open next video: {{ next_recording.display_title }}">
+                                            <p class="video-channel-label">{{ next_recording.channel if next_recording.channel else 'unknown' }}</p>
+                                            <div class="video-thumb-wrap">
+                                                <img class="video-thumb" src="{{ next_recording.thumbnail_url if next_recording.thumbnail_url else recording.thumbnail_url }}" alt="{{ next_recording.display_title }} thumbnail" loading="lazy" decoding="async">
+                                            </div>
+                                            <header class="video-item-header">
+                                                <div>
+                                                    <h4>{{ next_recording.display_title }}</h4>
+                                                    <p class="muted">{{ next_recording.day if next_recording.day else 'unknown' }}</p>
+                                                </div>
+                                                <div class="video-item-badges">
+                                                    {% if next_recording.is_live %}
+                                                        <span class="badge live">LIVE</span>
+                                                    {% else %}
+                                                        <span class="badge neutral">Recorded</span>
+                                                    {% endif %}
+                                                    {% if next_recording.quality %}
+                                                        <span class="meta-chip">Quality {{ next_recording.quality }}</span>
+                                                    {% endif %}
+                                                </div>
+                                            </header>
+                                            <dl class="video-meta-grid">
+                                                <div>
+                                                    <dt>Recorded</dt>
+                                                    <dd>
+                                                        {% if next_recorded_at %}
+                                                            <span class="utc-datetime" data-utc="{{ next_recorded_at }}">{{ next_recorded_at }}</span>
+                                                        {% else %}
+                                                            Unknown
+                                                        {% endif %}
+                                                    </dd>
+                                                </div>
+                                                <div>
+                                                    <dt>Size</dt>
+                                                    <dd>{{ next_recording.size_label if next_recording.size_label else 'n/a' }}</dd>
+                                                </div>
+                                                <div>
+                                                    <dt>Length</dt>
+                                                    <dd>{{ next_recording.duration_label if next_recording.duration_label else 'n/a' }}</dd>
+                                                </div>
+                                            </dl>
+                                        </a>
+                                    </article>
+                                {% else %}
+                                    <article class="video-item video-nav-empty-card">
+                                        <p class="video-nav-empty-text">No next video</p>
+                                    </article>
+                                {% endif %}
+                            </section>
+                        </div>
+                    </section>
+                {% endif %}
             </section>
         </div>
     </main>
@@ -508,6 +625,7 @@
             let overlaySideToggleDidDrag = false;
             let suppressOverlaySideToggleClick = false;
             let timeMetricShowsRemaining = false;
+            let pendingOrientationUnlockTimer = null;
             const fullscreenStateClassName = 'is-player-fullscreen';
 
             const isPlayerFullscreen = () => document.fullscreenElement === videoDetailContent;
@@ -564,6 +682,36 @@
                 } catch (_error) {
                     // Ignore unlock failures.
                 }
+            };
+
+            const cancelPendingOrientationUnlock = () => {
+                if (pendingOrientationUnlockTimer === null) {
+                    return;
+                }
+
+                window.clearTimeout(pendingOrientationUnlockTimer);
+                pendingOrientationUnlockTimer = null;
+            };
+
+            const scheduleOrientationUnlock = () => {
+                cancelPendingOrientationUnlock();
+                pendingOrientationUnlockTimer = window.setTimeout(() => {
+                    pendingOrientationUnlockTimer = null;
+                    if (isPlayerFullscreen()) {
+                        return;
+                    }
+
+                    unlockOrientationIfSupported();
+                }, 160);
+            };
+
+            const enforceFullscreenLandscapeLock = () => {
+                if (!isPlayerFullscreen()) {
+                    return;
+                }
+
+                cancelPendingOrientationUnlock();
+                void lockLandscapeOnMobile();
             };
 
             const normalizeFullscreenChatMode = (rawValue) => {
@@ -2494,33 +2642,7 @@
                 }
 
                 if (isLive) {
-                    if (payload.playback_mode !== 'live-dvr') {
-                        return true;
-                    }
-
-                    const targetUtcMs = Number(payload.target_utc_ms);
-                    if (!Number.isFinite(targetUtcMs) || !Number.isFinite(recordingStartUtcMs)) {
-                        return true;
-                    }
-
-                    const mediaEnd = getMediaEnd();
-                    let desiredTime = Math.max((targetUtcMs - Number(recordingStartUtcMs)) / 1000, 0);
-                    if (!Number.isFinite(desiredTime)) {
-                        return true;
-                    }
-
-                    if (Number.isFinite(mediaEnd) && mediaEnd > 0) {
-                        desiredTime = Math.max(0, Math.min(desiredTime, Math.max(mediaEnd - 0.2, 0)));
-                    }
-
-                    if (desiredTime <= 0.2) {
-                        return true;
-                    }
-
-                    switchToDvrMode(desiredTime, {
-                        forcePlay: true,
-                        autoReturnToLiveOnCatchUp: false,
-                    });
+                    // Live recordings should always start in direct live mode on page load.
                     return true;
                 }
 
@@ -2959,24 +3081,50 @@
                 }
             });
 
+            const shouldIgnorePlayerArrowSeek = (event) => {
+                if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) {
+                    return true;
+                }
+
+                const target = event.target;
+                if (!(target instanceof Element)) {
+                    return false;
+                }
+
+                if (target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""], [contenteditable]')) {
+                    return true;
+                }
+
+                return false;
+            };
+
             document.addEventListener('keydown', (event) => {
-                if (event.key !== 'Escape') {
+                if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                    if (shouldIgnorePlayerArrowSeek(event)) {
+                        return;
+                    }
+
+                    seekByGestureSeconds(event.key === 'ArrowLeft' ? -gestureSeekSeconds : gestureSeekSeconds);
+                    showFullscreenControls();
+                    event.preventDefault();
                     return;
                 }
 
-                if (isSpeedMenuOpen) {
-                    setSpeedMenuOpen(false);
-                }
+                if (event.key === 'Escape') {
+                    if (isSpeedMenuOpen) {
+                        setSpeedMenuOpen(false);
+                    }
 
-                if (isVolumeMenuOpen) {
-                    setVolumeMenuOpen(false);
-                }
+                    if (isVolumeMenuOpen) {
+                        setVolumeMenuOpen(false);
+                    }
 
-                if (!isPlayerFullscreen() && isNormalMobileChatOverlayViewport()) {
-                    if (isNormalOverlayMode() && !isNormalChatPanelCollapsed()) {
-                        setNormalChatPanelCollapsed(true);
-                    } else if (isNormalMobileSidePanelOpen()) {
-                        setNormalMobileSidePanelOpen(false);
+                    if (!isPlayerFullscreen() && isNormalMobileChatOverlayViewport()) {
+                        if (isNormalOverlayMode() && !isNormalChatPanelCollapsed()) {
+                            setNormalChatPanelCollapsed(true);
+                        } else if (isNormalMobileSidePanelOpen()) {
+                            setNormalMobileSidePanelOpen(false);
+                        }
                     }
                 }
             });
@@ -3011,6 +3159,7 @@
                 updatePlayerChatRestoreButton();
                 showFullscreenControls();
                 if (isPlayerFullscreen()) {
+                    enforceFullscreenLandscapeLock();
                     videoDetailContent.classList.remove('chat-panel-mobile-open');
                     const persistedFullscreenMode = readPersistedFullscreenChatMode();
                     const syncedMode = readPersistedSyncedChatMode();
@@ -3028,7 +3177,7 @@
                     void syncChatTimeline(liveOffsetSeconds, true);
                     syncSharedPanelOverlayState();
                 } else {
-                    unlockOrientationIfSupported();
+                    scheduleOrientationUnlock();
                     stopSideChatResize();
                     stopOverlayChatResize();
                     enforceNormalMobileChatLayout();
@@ -3063,6 +3212,7 @@
 
             window.addEventListener('orientationchange', () => {
                 window.setTimeout(() => {
+                    enforceFullscreenLandscapeLock();
                     syncOpenControlPopoverPositions();
                 }, 120);
             });
@@ -3582,6 +3732,8 @@
                         return;
                     }
 
+                    enforceFullscreenLandscapeLock();
+
                     if (
                         loadKind === 'live-dvr'
                         && isAwaitingLiveDvrSourceReady
@@ -4057,6 +4209,31 @@
                 const currentTime = Number.isFinite(player.currentTime) ? Math.max(player.currentTime, 0) : 0;
                 const distanceToNewest = Math.max(mediaEnd - currentTime, 0);
                 return distanceToNewest <= Math.max(liveOffsetSeconds, 0);
+            };
+
+            const resolveDvrTargetTimeFromLivePlayback = () => {
+                const currentTime = Number.isFinite(player.currentTime) ? Math.max(player.currentTime, 0) : 0;
+                if (!isLive || inDvrMode) {
+                    return currentTime;
+                }
+
+                const playbackTargetUtcMs = computePlaybackTargetUtcMs();
+                if (Number.isFinite(playbackTargetUtcMs) && Number.isFinite(recordingStartUtcMs)) {
+                    const derivedSeconds = (Number(playbackTargetUtcMs) - Number(recordingStartUtcMs)) / 1000;
+                    if (Number.isFinite(derivedSeconds) && derivedSeconds >= 0) {
+                        return derivedSeconds;
+                    }
+                }
+
+                const mediaEnd = getMediaEnd();
+                if (Number.isFinite(mediaEnd) && mediaEnd > 0) {
+                    const bufferedLiveFallback = Math.max(mediaEnd - Math.max(liveOffsetSeconds, 0), 0);
+                    if (Number.isFinite(bufferedLiveFallback)) {
+                        return bufferedLiveFallback;
+                    }
+                }
+
+                return currentTime;
             };
 
             const switchToDirectLive = (jumpClosestToLiveEdge = false) => {
@@ -4580,7 +4757,7 @@
                     if (inDvrMode) {
                         switchToDirectLive();
                     } else {
-                        switchToDvrMode(player.currentTime);
+                        switchToDvrMode(resolveDvrTargetTimeFromLivePlayback());
                     }
 
                     void syncChatTimeline(liveOffsetSeconds, true);

@@ -1,5 +1,6 @@
 import json
 import hashlib
+import math
 import mimetypes
 import re
 import shutil
@@ -210,6 +211,26 @@ def _format_size_label(size_bytes: int) -> str:
         return f"{int(value)} {units[unit_index]}"
 
     return f"{value:.1f} {units[unit_index]}"
+
+
+def _format_duration_label(total_seconds_value: object) -> str:
+    try:
+        total_seconds = float(total_seconds_value)
+    except (TypeError, ValueError):
+        return "n/a"
+
+    if not math.isfinite(total_seconds) or total_seconds <= 0:
+        return "n/a"
+
+    rounded = max(1, int(math.floor(total_seconds)))
+    hours = rounded // 3600
+    minutes = (rounded % 3600) // 60
+    seconds = rounded % 60
+
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+
+    return f"{minutes}:{seconds:02d}"
 
 
 def _build_cache_summary() -> dict[str, object]:
@@ -691,13 +712,31 @@ def _recording_navigation_payload(item: dict[str, object] | None) -> dict[str, o
     if not view_slug:
         return None
 
+    size_label = str(item.get("size_label", "")).strip()
+    size_bytes = int(item.get("size_bytes", 0) or 0)
+    duration_seconds = item.get("media_duration_seconds")
+
+    started_at_value = item.get("started_at")
+    started_at = str(started_at_value).strip() if isinstance(started_at_value, str) else ""
+    recorded_at_value = item.get("recorded_at")
+    recorded_at = str(recorded_at_value).strip() if isinstance(recorded_at_value, str) else ""
+
     return {
         "view_slug": view_slug,
         "view_url": url_for("dashboard.view_recording", recording_slug=view_slug),
         "display_title": str(item.get("display_title", "")).strip() or str(item.get("file_name", "")).strip(),
         "channel": str(item.get("channel", "")).strip(),
-        "recorded_at": item.get("recorded_at"),
+        "day": str(item.get("day", "")).strip(),
+        "thumbnail_url": str(item.get("thumbnail_url", "")).strip(),
+        "is_live": bool(item.get("is_live", False)),
+        "quality": str(item.get("quality", "")).strip(),
+        "started_at": started_at,
+        "recorded_at": recorded_at,
         "recorded_at_unix": int(item.get("recorded_at_unix", 0) or 0),
+        "size_label": size_label or _format_size_label(size_bytes),
+        "size_bytes": size_bytes,
+        "media_duration_seconds": duration_seconds,
+        "duration_label": _format_duration_label(duration_seconds),
     }
 
 
@@ -707,6 +746,9 @@ def _channel_recording_neighbors(
 ) -> tuple[dict[str, object] | None, dict[str, object] | None]:
     channel_name = str(current_record.get("channel", "")).strip()
     current_relative_path = str(current_record.get("relative_path", "")).strip()
+    current_view_slug = str(current_record.get("view_slug", "")).strip()
+    if not current_view_slug and current_relative_path:
+        current_view_slug = _recording_view_slug(current_relative_path)
     if not channel_name or not current_relative_path:
         return None, None
 
@@ -746,9 +788,30 @@ def _channel_recording_neighbors(
     if current_index < 0:
         return None, None
 
+    def _find_neighbor_item(start_index: int, step: int) -> dict[str, object] | None:
+        index = start_index
+        while 0 <= index < len(filtered):
+            candidate = filtered[index]
+            candidate_relative_path = str(candidate.get("relative_path", "")).strip()
+            candidate_view_slug = str(candidate.get("view_slug", "")).strip()
+
+            if not candidate_relative_path or candidate_relative_path == current_relative_path:
+                index += step
+                continue
+
+            # Live .ts and incremental .mp4 can share a stem and therefore slug.
+            # Skip same-slug siblings so previous/next always moves to another recording.
+            if current_view_slug and candidate_view_slug and candidate_view_slug == current_view_slug:
+                index += step
+                continue
+
+            return candidate
+
+        return None
+
     # Catalog order is newest-first. Previous should go older; Next should go newer.
-    previous_item = filtered[current_index + 1] if current_index + 1 < len(filtered) else None
-    next_item = filtered[current_index - 1] if current_index > 0 else None
+    previous_item = _find_neighbor_item(current_index + 1, 1)
+    next_item = _find_neighbor_item(current_index - 1, -1)
 
     return _recording_navigation_payload(previous_item), _recording_navigation_payload(next_item)
 
@@ -1243,14 +1306,19 @@ def _build_recordings_catalog(recording_manager: Any, settings_store: Any) -> di
                     if suffix and suffix not in VIDEO_EXTENSIONS:
                         continue
 
-                    # Prefer finalized MP4 when both MP4 and TS are present for the same recording stem.
-                    if suffix == ".ts" and recording_file.stem in mp4_stems:
-                        continue
-
                     try:
                         file_stat = recording_file.stat()
                         resolved_file = recording_file.resolve()
                     except OSError:
+                        continue
+
+                    # Prefer finalized MP4 when both MP4 and TS are present for the same recording stem,
+                    # but keep the TS entry if it is currently active.
+                    if (
+                        suffix == ".ts"
+                        and recording_file.stem in mp4_stems
+                        and resolved_file not in active_by_path
+                    ):
                         continue
 
                     recorded_dt = _derive_recorded_datetime(day_name, recording_file.stem)
@@ -1669,6 +1737,30 @@ def transcode_queue_status() -> object:
     active_job = snapshot.get("active")
     has_persistent_active_job = isinstance(active_job, dict) and bool(active_job)
     if not has_persistent_active_job:
+        live_dvr_service = services.get("live_incremental_dvr")
+        get_live_snapshot = getattr(live_dvr_service, "snapshot", None)
+        if callable(get_live_snapshot):
+            try:
+                live_snapshot = get_live_snapshot()
+            except Exception:
+                live_snapshot = None
+
+            if isinstance(live_snapshot, dict) and bool(live_snapshot.get("is_working")):
+                active_payload = live_snapshot.get("active")
+                indicator_text = str(live_snapshot.get("indicator_text", "")).strip()
+                if isinstance(active_payload, dict):
+                    snapshot["active"] = {
+                        "relative_path": str(active_payload.get("relative_path", "")),
+                        "file_name": str(active_payload.get("file_name", "")),
+                        "progress_percent": int(active_payload.get("progress_percent", 0) or 0),
+                        "started_at": str(active_payload.get("started_at", "")),
+                    }
+                    snapshot["is_working"] = True
+                    snapshot["indicator_text"] = indicator_text
+
+    active_job = snapshot.get("active")
+    has_persistent_active_job = isinstance(active_job, dict) and bool(active_job)
+    if not has_persistent_active_job:
         transient_active = _snapshot_active_transient_transcode(recordings_root)
         if transient_active is not None:
             progress_percent = int(transient_active.get("progress_percent", 0) or 0)
@@ -1875,6 +1967,31 @@ def recording_media(recording_path: str) -> object:
             live_buffer_seconds = _live_buffer_seconds_from_request()
             live_dvr_key = request.args.get("live_dvr", "").strip()
             if _is_valid_live_dvr_key(live_dvr_key):
+                live_dvr_service = services.get("live_incremental_dvr")
+                get_dvr_snapshot_path = getattr(live_dvr_service, "get_dvr_snapshot_path", None)
+                if callable(get_dvr_snapshot_path):
+                    try:
+                        snapshot_path = get_dvr_snapshot_path(resolved_path)
+                    except Exception:
+                        snapshot_path = None
+
+                    if isinstance(snapshot_path, Path):
+                        snapshot_size = _safe_file_size(snapshot_path)
+                        if snapshot_size > 0:
+                            response = send_file(
+                                snapshot_path,
+                                mimetype="video/mp4",
+                                conditional=True,
+                                as_attachment=False,
+                                max_age=0,
+                            )
+                            response.headers["Accept-Ranges"] = "bytes"
+                            response.headers["Cache-Control"] = "no-store"
+                            response.headers["X-Playback-Transcoded-File"] = "true"
+                            response.headers["X-Playback-Live-DVR"] = "true"
+                            response.headers["X-Playback-Live-DVR-Incremental"] = "true"
+                            return response
+
                 try:
                     dvr_snapshot_path = _live_dvr_snapshot_path(
                         root,
@@ -2041,6 +2158,65 @@ def recording_transcode_status(recording_path: str) -> object:
     recording_manager = services["recording_manager"]
     if _is_live_recording_path(recording_manager, resolved_path):
         if prefer_recorded_playback:
+            live_dvr_service = services.get("live_incremental_dvr")
+            get_live_status = getattr(live_dvr_service, "get_live_status", None)
+            if callable(get_live_status):
+                try:
+                    live_status = get_live_status(resolved_path)
+                except Exception:
+                    live_status = None
+
+                if isinstance(live_status, dict):
+                    live_state = str(live_status.get("state", "queued")).strip().lower()
+                    available_now = bool(live_status.get("available"))
+                    progress_percent = int(live_status.get("progress_percent", 0) or 0)
+                    source_size = int(live_status.get("source_size_bytes", source_size_bytes) or source_size_bytes)
+                    cached_size = int(live_status.get("cached_size_bytes", 0) or 0)
+                    live_error = live_status.get("error")
+
+                    if available_now:
+                        return jsonify(
+                            {
+                                "available": True,
+                                "is_transcoding": False,
+                                "progress_percent": 100,
+                                "progress_label": "Ready",
+                                "source_size_bytes": source_size,
+                                "cached_size_bytes": cached_size,
+                                "is_live_source": True,
+                                "state": "ready",
+                                "error": None,
+                            }
+                        )
+
+                    progress_label = "Queued"
+                    is_transcoding = False
+                    if live_state == "catching_up":
+                        progress_label = "Catching up"
+                        is_transcoding = True
+                    elif live_state == "finalizing_tail":
+                        progress_label = "Finalizing tail"
+                        is_transcoding = True
+                    elif live_state == "failed":
+                        progress_label = "Failed"
+                        is_transcoding = False
+                    elif live_state == "pending":
+                        progress_label = "Preparing"
+
+                    return jsonify(
+                        {
+                            "available": False,
+                            "is_transcoding": bool(is_transcoding),
+                            "progress_percent": max(0, min(99, progress_percent)),
+                            "progress_label": progress_label,
+                            "source_size_bytes": source_size,
+                            "cached_size_bytes": cached_size,
+                            "is_live_source": True,
+                            "state": live_state,
+                            "error": live_error if live_state == "failed" else None,
+                        }
+                    )
+
             transient_cache_id = request.args.get("transient_id", "").strip()
             live_dvr_key = request.args.get("live_dvr", "").strip()
             has_transient_id = _is_valid_transient_cache_id(transient_cache_id)

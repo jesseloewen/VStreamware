@@ -262,6 +262,9 @@ class TranscodeQueueService:
         if not isinstance(event, dict):
             return
 
+        if bool(event.get("skip_transcode_queue")):
+            return
+
         event_name = str(event.get("event", "")).strip().lower()
         if event_name != "recording_stopped":
             return

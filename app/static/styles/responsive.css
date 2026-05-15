@@ -239,6 +239,15 @@
         width: auto;
     }
 
+    .video-nav-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .video-autoplay-setting-panel {
+        width: auto;
+        justify-content: flex-start;
+    }
+
     .video-player-controls {
         padding: 8px;
         gap: 7px;

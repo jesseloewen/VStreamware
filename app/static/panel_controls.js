@@ -165,7 +165,6 @@
             : 0;
 
         if (browserCardHeight <= 0) {
-            panelShell.style.removeProperty('--saved-panel-viewport-max-height');
             return;
         }
 
@@ -410,6 +409,14 @@
             return;
         }
 
+        const currentPanelBody = currentPanel.querySelector('.panel-body');
+        const previousScrollTop = currentPanelBody instanceof HTMLElement ? currentPanelBody.scrollTop : 0;
+        const previousScrollLeft = currentPanelBody instanceof HTMLElement ? currentPanelBody.scrollLeft : 0;
+        const currentPanelShell = currentPanel.querySelector('.panel-shell');
+        const previousMaxHeight = currentPanelShell instanceof HTMLElement
+            ? String(currentPanelShell.style.getPropertyValue('--saved-panel-viewport-max-height') || '').trim()
+            : '';
+
         const parser = new DOMParser();
         const parsed = parser.parseFromString(html, 'text/html');
         const nextPanel = parsed.querySelector('#saved-panel');
@@ -417,9 +424,22 @@
             return;
         }
 
+        const nextPanelShell = nextPanel.querySelector('.panel-shell');
+        if (nextPanelShell instanceof HTMLElement && previousMaxHeight) {
+            nextPanelShell.style.setProperty('--saved-panel-viewport-max-height', previousMaxHeight);
+        }
+
         currentPanel.replaceWith(nextPanel);
         if (wasOpen) {
             nextPanel.classList.add('is-open');
+        }
+
+        const nextPanelBody = nextPanel.querySelector('.panel-body');
+        if (nextPanelBody instanceof HTMLElement && (previousScrollTop > 0 || previousScrollLeft > 0)) {
+            window.requestAnimationFrame(() => {
+                nextPanelBody.scrollTop = previousScrollTop;
+                nextPanelBody.scrollLeft = previousScrollLeft;
+            });
         }
 
         initializeSavedSortUi();
