@@ -19,6 +19,7 @@ class AutoRecorder:
         self._poll_seconds = max(5, int(poll_seconds))
         self._stream_event_callback = stream_event_callback
         self._channel_live_states: dict[str, dict[str, str | bool | None]] = {}
+        self._manual_stop_suppression: set[str] = set()
         self._last_refresh_at: str | None = None
         self._stop_event = threading.Event()
         self._wait_condition = threading.Condition()
@@ -110,6 +111,30 @@ class AutoRecorder:
         with self._wait_condition:
             self._wait_condition.notify()
 
+    def suppress_auto_record_until_offline(self, channel: str) -> None:
+        normalized = self._normalize_channel(channel)
+        if not normalized:
+            return
+
+        with self._lock:
+            self._manual_stop_suppression.add(normalized)
+
+    def clear_manual_stop_suppression(self, channel: str) -> None:
+        normalized = self._normalize_channel(channel)
+        if not normalized:
+            return
+
+        with self._lock:
+            self._manual_stop_suppression.discard(normalized)
+
+    def _is_manual_stop_suppressed(self, channel: str) -> bool:
+        normalized = self._normalize_channel(channel)
+        if not normalized:
+            return False
+
+        with self._lock:
+            return normalized in self._manual_stop_suppression
+
     def _run(self) -> None:
         while not self._stop_event.is_set():
             try:
@@ -182,6 +207,9 @@ class AutoRecorder:
 
                     should_emit_live_change = previous_live_state is not None and previous_live_state != is_live
                     should_emit_startup_live = previous_live_state is None and is_live
+                    if previous_live_state is True and not is_live:
+                        self.clear_manual_stop_suppression(channel)
+
                     if should_emit_live_change or should_emit_startup_live:
                         event: dict[str, Any] = {
                             "event": "stream_live" if is_live else "stream_end",
@@ -200,7 +228,8 @@ class AutoRecorder:
                     stream_info["last_recording_at"] = last_recording_at
                     next_live_states[channel] = stream_info
 
-                    if auto_record and is_live and not is_recording:
+                    is_manual_stop_suppressed = self._is_manual_stop_suppressed(channel)
+                    if auto_record and is_live and not is_recording and not is_manual_stop_suppressed:
                         self._recording_manager.start_recording(
                             channel,
                         )

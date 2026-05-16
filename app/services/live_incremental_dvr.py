@@ -2,6 +2,7 @@ import json
 import shutil
 import subprocess
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,7 @@ class LiveIncrementalDvrService:
         self._poll_seconds = max(2, int(poll_seconds or 12))
         self._safety_seconds = max(0, int(safety_seconds or 20))
         self._keep_chunks = bool(keep_chunks)
+        self._on_demand_throttle_seconds = max(15, int(self._chunk_seconds))
 
         self._jobs: dict[str, dict[str, object]] = {}
         self._active_job_key: str | None = None
@@ -271,6 +273,8 @@ class LiveIncrementalDvrService:
         target_mp4 = source_path.with_suffix(".mp4")
         chunks_dir = self._chunks_dir_path(source_path)
         state_file = self._state_file_path(source_path)
+        now_ts = time.time()
+        next_background_process_ts = now_ts + float(self._chunk_seconds)
 
         return {
             "source_path": source_path,
@@ -289,6 +293,11 @@ class LiveIncrementalDvrService:
             "is_finalizing": False,
             "last_error": "",
             "finalized_at": "",
+            "next_background_process_ts": next_background_process_ts,
+            "pending_on_demand_nudge_ts": 0.0,
+            "last_on_demand_request_ts": 0.0,
+            "last_process_attempt_ts": 0.0,
+            "last_process_success_ts": 0.0,
         }
 
     def _write_job_state(self, job: dict[str, object]) -> None:
@@ -346,6 +355,9 @@ class LiveIncrementalDvrService:
             if isinstance(job, dict):
                 job["is_active"] = True
                 job["updated_at"] = self._utc_now_iso()
+                next_background_process_ts = float(job.get("next_background_process_ts", 0.0) or 0.0)
+                if next_background_process_ts <= 0.0:
+                    job["next_background_process_ts"] = time.time() + float(self._chunk_seconds)
                 return
 
             new_job = self._job_from_source(resolved)
@@ -354,6 +366,41 @@ class LiveIncrementalDvrService:
 
         with self._wait_condition:
             self._wait_condition.notify_all()
+
+    def request_on_demand_processing(self, source_file: str | Path) -> bool:
+        if not self._enabled:
+            return False
+
+        source_path = Path(source_file)
+        try:
+            resolved = source_path.expanduser().resolve()
+        except OSError:
+            return False
+
+        self._register_source(resolved)
+        source_key = self._path_key(resolved)
+
+        should_notify = False
+        with self._lock:
+            job = self._jobs.get(source_key)
+            if not isinstance(job, dict):
+                return False
+
+            now_ts = time.time()
+            last_request_ts = float(job.get("last_on_demand_request_ts", 0.0) or 0.0)
+            if last_request_ts > 0 and (now_ts - last_request_ts) < float(self._on_demand_throttle_seconds):
+                return False
+
+            job["last_on_demand_request_ts"] = now_ts
+            job["pending_on_demand_nudge_ts"] = now_ts
+            job["updated_at"] = self._utc_now_iso()
+            should_notify = True
+
+        if should_notify:
+            with self._wait_condition:
+                self._wait_condition.notify_all()
+
+        return should_notify
 
     def _is_recording_active(self, source_path: Path) -> bool:
         try:
@@ -688,6 +735,8 @@ class LiveIncrementalDvrService:
                 pass
 
     def _process_job(self, job_key: str, flush: bool = False) -> None:
+        rendered_any = False
+
         with self._lock:
             job = self._jobs.get(job_key)
             if not isinstance(job, dict):
@@ -702,6 +751,7 @@ class LiveIncrementalDvrService:
             processed_any = True
             while processed_any and not self._stop_event.is_set():
                 processed_any = self._render_chunk(job_key, job, flush=flush)
+                rendered_any = rendered_any or processed_any
                 if not flush:
                     break
         finally:
@@ -710,6 +760,13 @@ class LiveIncrementalDvrService:
                 if isinstance(current, dict):
                     current["is_processing"] = False
                     current["is_finalizing"] = False
+                    if not flush:
+                        now_ts = time.time()
+                        current["pending_on_demand_nudge_ts"] = 0.0
+                        current["last_process_attempt_ts"] = now_ts
+                        if rendered_any:
+                            current["last_process_success_ts"] = now_ts
+                        current["next_background_process_ts"] = now_ts + float(self._chunk_seconds)
                     current["updated_at"] = self._utc_now_iso()
                     self._write_job_state(current)
 
@@ -947,7 +1004,9 @@ class LiveIncrementalDvrService:
             for source_path in self._collect_active_sources():
                 self._register_source(source_path)
 
+            next_wait_timeout = float(self._poll_seconds)
             with self._lock:
+                now_ts = time.time()
                 pending_keys = [
                     key
                     for key, job in self._jobs.items()
@@ -955,7 +1014,32 @@ class LiveIncrementalDvrService:
                     and bool(job.get("is_active"))
                     and not bool(job.get("is_processing"))
                     and not bool(job.get("is_finalizing"))
+                    and (
+                        float(job.get("pending_on_demand_nudge_ts", 0.0) or 0.0) > 0.0
+                        or now_ts >= float(job.get("next_background_process_ts", 0.0) or 0.0)
+                    )
                 ]
+
+                for job in self._jobs.values():
+                    if not isinstance(job, dict):
+                        continue
+                    if not bool(job.get("is_active")):
+                        continue
+                    if bool(job.get("is_processing")) or bool(job.get("is_finalizing")):
+                        continue
+
+                    pending_on_demand_nudge_ts = float(job.get("pending_on_demand_nudge_ts", 0.0) or 0.0)
+                    if pending_on_demand_nudge_ts > 0.0:
+                        next_wait_timeout = min(next_wait_timeout, 0.5)
+                        continue
+
+                    next_background_process_ts = float(job.get("next_background_process_ts", 0.0) or 0.0)
+                    if next_background_process_ts <= 0.0 or now_ts >= next_background_process_ts:
+                        next_wait_timeout = min(next_wait_timeout, 0.5)
+                        continue
+
+                    seconds_until_due = max(0.5, next_background_process_ts - now_ts)
+                    next_wait_timeout = min(next_wait_timeout, seconds_until_due)
 
             for job_key in pending_keys:
                 if self._stop_event.is_set():
@@ -966,4 +1050,4 @@ class LiveIncrementalDvrService:
             self._active_job_key = None
 
             with self._wait_condition:
-                self._wait_condition.wait(timeout=self._poll_seconds)
+                self._wait_condition.wait(timeout=max(0.5, next_wait_timeout))

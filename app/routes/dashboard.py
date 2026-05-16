@@ -2159,6 +2159,13 @@ def recording_transcode_status(recording_path: str) -> object:
     if _is_live_recording_path(recording_manager, resolved_path):
         if prefer_recorded_playback:
             live_dvr_service = services.get("live_incremental_dvr")
+            request_on_demand_processing = getattr(live_dvr_service, "request_on_demand_processing", None)
+            if callable(request_on_demand_processing):
+                try:
+                    request_on_demand_processing(resolved_path)
+                except Exception:
+                    pass
+
             get_live_status = getattr(live_dvr_service, "get_live_status", None)
             if callable(get_live_status):
                 try:
@@ -2473,6 +2480,8 @@ def start_recording() -> object:
     ok, message = services["recording_manager"].start_recording(
         channel,
     )
+    if ok:
+        services["auto_recorder"].clear_manual_stop_suppression(channel)
     services["auto_recorder"].request_refresh()
     flash(message, "success" if ok else "error")
     return _redirect_back()
@@ -2483,6 +2492,8 @@ def stop_recording() -> object:
     services = get_services(current_app)
     channel = request.form.get("channel", "")
     ok, message = services["recording_manager"].stop_recording(channel)
+    if ok:
+        services["auto_recorder"].suppress_auto_record_until_offline(channel)
     services["auto_recorder"].request_refresh()
     flash(message, "success" if ok else "error")
     return _redirect_back()
