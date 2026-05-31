@@ -315,13 +315,19 @@
     white-space: nowrap;
 }
 
-/* Empty stage placeholder */
+/* Empty stage placeholder — only shown when no slots exist */
 .mp-stage-empty {
     flex: 1;
+    min-height: 0;
     display: grid;
     place-items: center;
     padding: 24px;
     text-align: center;
+}
+
+/* Hide removes it fully from flex layout so it gives up all its space */
+.mp-stage-empty[hidden] {
+    display: none !important;
 }
 
 .mp-stage-empty p {
@@ -330,14 +336,19 @@
     margin: 0 0 6px;
 }
 
-/* Video slots grid */
+/* Video slots grid — fills the entire stage when visible */
 .mp-slot-grid {
-    flex: 1;
+    flex: 1 1 0;
     min-height: 0;
     display: grid;
     gap: 4px;
     padding: 4px;
     overflow: hidden;
+}
+
+/* When hidden, give up all flex space so nothing reserves a gap */
+.mp-slot-grid[hidden] {
+    display: none !important;
 }
 
 .mp-slot-grid[data-count="1"] {
