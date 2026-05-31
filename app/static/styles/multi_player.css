@@ -125,10 +125,24 @@
     gap: 8px;
 }
 
+.mp-picker-header-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
 .mp-picker-header h3 {
     margin: 0;
     font-size: 14px;
     font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mp-picker-toggle {
+    flex-shrink: 0;
 }
 
 .mp-picker-filters {
@@ -762,6 +776,30 @@
     font-size: 13px;
     color: #93c5fd;
     font-weight: 600;
+}
+
+/* ── Picker collapse ────────────────────────────────────────────────────────── */
+
+/* Desktop: hide the column and collapse the grid track */
+@media (min-width: 981px) {
+    .mp-picker-collapsed .mp-picker-panel {
+        display: none;
+    }
+
+    .mp-picker-collapsed .mp-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* Mobile: hide the row panel */
+@media (max-width: 980px) {
+    .mp-picker-collapsed .mp-picker-panel {
+        display: none;
+    }
+
+    .mp-picker-collapsed .mp-body {
+        grid-template-rows: auto;
+    }
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────────────── */

@@ -74,7 +74,23 @@
                 <!-- ── Left: recording picker ── -->
                 <aside class="mp-picker-panel" aria-label="Recording picker">
                     <div class="mp-picker-header">
-                        <h3>Pick Recordings</h3>
+                        <div class="mp-picker-header-title-row">
+                            <h3>Pick Recordings</h3>
+                            <button
+                                type="button"
+                                class="panel-hamburger mp-picker-toggle"
+                                id="mp-picker-toggle"
+                                aria-controls="mp-picker-list"
+                                aria-expanded="true"
+                                aria-label="Hide recordings picker"
+                            >
+                                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <rect width="18" height="18" x="3" y="3" rx="2"/>
+                                    <path d="M9 3v18"/>
+                                </svg>
+                                <span class="panel-toggle-text" data-expanded-label="Hide Picker" data-collapsed-label="Show Picker">Hide Picker</span>
+                            </button>
+                        </div>
                         <div class="mp-picker-filters">
                             <select id="mp-filter-channel" aria-label="Filter by channel">
                                 <option value="all">All channels</option>
@@ -174,6 +190,55 @@
         const btnClearAll    = document.getElementById('mp-clear-all');
         const btnSeekBack    = document.getElementById('mp-seek-back');
         const btnSeekFwd     = document.getElementById('mp-seek-forward');
+        const pickerToggle   = document.getElementById('mp-picker-toggle');
+
+        /* ── Picker collapse (mirrors saved-panel toggle pattern) ── */
+        const PICKER_COLLAPSE_KEY  = 'vstreamware.mp-picker-collapsed';
+        const PICKER_COLLAPSE_CLASS = 'mp-picker-collapsed';
+
+        const mpPage = document.querySelector('.multi-player-page');
+
+        const updatePickerToggleState = () => {
+            if (!pickerToggle || !mpPage) return;
+            const collapsed = mpPage.classList.contains(PICKER_COLLAPSE_CLASS);
+            pickerToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            pickerToggle.classList.toggle('is-active', !collapsed);
+            const labelEl = pickerToggle.querySelector('.panel-toggle-text');
+            if (labelEl) {
+                const nextText = collapsed
+                    ? (labelEl.getAttribute('data-collapsed-label') || 'Show Picker')
+                    : (labelEl.getAttribute('data-expanded-label')  || 'Hide Picker');
+                labelEl.textContent = nextText;
+            }
+            pickerToggle.setAttribute('aria-label',
+                collapsed ? 'Show recordings picker' : 'Hide recordings picker');
+        };
+
+        const setPickerCollapsed = (collapsed, persist = false) => {
+            if (!mpPage) return;
+            mpPage.classList.toggle(PICKER_COLLAPSE_CLASS, Boolean(collapsed));
+            updatePickerToggleState();
+            if (persist) {
+                try { window.localStorage.setItem(PICKER_COLLAPSE_KEY, collapsed ? '1' : '0'); }
+                catch (_e) {}
+            }
+        };
+
+        /* Restore persisted state on page load */
+        (() => {
+            try {
+                const raw = window.localStorage.getItem(PICKER_COLLAPSE_KEY);
+                const wasCollapsed = raw === '1' || raw === 'true';
+                setPickerCollapsed(wasCollapsed, false);
+            } catch (_e) {}
+        })();
+
+        if (pickerToggle) {
+            pickerToggle.addEventListener('click', () => {
+                const nowCollapsed = !mpPage.classList.contains(PICKER_COLLAPSE_CLASS);
+                setPickerCollapsed(nowCollapsed, true);
+            });
+        }
 
         /* ── Helpers ── */
         const escHtml = (v) => String(v ?? '')
@@ -367,17 +432,17 @@
                 <div class="mp-offset-group" aria-label="Time offset adjustment">
                     <span class="mp-offset-label">Offset</span>
                     <button type="button" class="mp-offset-dec" data-slot-id="${slot.id}"
-                        aria-label="Decrease offset by 1 second">−</button>
+                        aria-label="Decrease offset by 0.1 seconds">−</button>
                     <input
                         type="number"
                         class="mp-offset-input"
                         data-slot-id="${slot.id}"
                         value="0"
-                        step="0.5"
+                        step="0.1"
                         aria-label="Time offset in seconds (positive = delay this video)"
                     >
                     <button type="button" class="mp-offset-inc" data-slot-id="${slot.id}"
-                        aria-label="Increase offset by 1 second">+</button>
+                        aria-label="Increase offset by 0.1 seconds">+</button>
                 </div>
 
                 <span class="mp-slot-time" id="time-${slot.id}">0:00</span>
@@ -402,6 +467,31 @@
             }
         };
 
+        /* ── Overlap window: the union UTC span of all loaded slots ──
+         * Returns { startMs, endMs } or null when no slots have UTC data. */
+        const getActiveWindowMs = () => {
+            let startMs = Infinity;
+            let endMs   = -Infinity;
+            let hasData = false;
+            slots.forEach((s) => {
+                const sMs = s.startUtcMs;
+                if (!sMs) return;
+                hasData = true;
+                const eMs = sMs + (s.recording.media_duration_seconds || 0) * 1000;
+                if (sMs < startMs) startMs = sMs;
+                if (eMs > endMs)   endMs   = eMs;
+            });
+            return hasData ? { startMs, endMs } : null;
+        };
+
+        /* Returns true when rec has any temporal overlap with the active window */
+        const recOverlapsWindow = (rec, win) => {
+            const rStart = Number(rec.recording_start_utc_ms) || 0;
+            if (!rStart) return true; /* no UTC data — always show */
+            const rEnd = rStart + (rec.media_duration_seconds || 0) * 1000;
+            return rStart < win.endMs && rEnd > win.startMs;
+        };
+
         /* ── Add a recording to the stage ── */
         const addSlot = (recording) => {
             if (slots.length >= MAX_SLOTS) {
@@ -423,20 +513,31 @@
             slotGrid.appendChild(slotEl);
 
             /* Wire video element — volume is controlled entirely through
-               the gain node / videoEl.volume; never muted */
+               the gain node; videoEl.volume is always 1 so it never acts
+               as a silent multiplier on top of the gain node */
             const videoEl = slotEl.querySelector('.mp-slot-video');
             slot.videoEl = videoEl;
-            videoEl.volume = slot.volume;
+            videoEl.volume = 1;
             videoEl.src = recording.media_url;
 
             /* Set initial pan track fill (pan=0 → --pan-pct:50% → no fill) */
             applyPan(slot.id, slot.pan);
 
-            /* Hide loading overlay once loadedmetadata fires */
+            /* Hide loading overlay and auto-sync-play once metadata is ready */
             const overlay = document.getElementById(`overlay-${slot.id}`);
             videoEl.addEventListener('loadedmetadata', () => {
                 if (overlay) overlay.classList.add('is-hidden');
                 updateSyncBarDuration();
+
+                /* If any other slot is already playing, seek this one to its
+                   synced position and join playback immediately */
+                const slotIdx = slots.indexOf(slot);
+                const primary = slots[primarySlotIndex];
+                if (primary && primary !== slot && primary.videoEl && !primary.videoEl.paused) {
+                    const target = targetTimeForSlot(primary.videoEl.currentTime, slotIdx);
+                    if (target >= 0) videoEl.currentTime = target;
+                    videoEl.play().catch(() => {});
+                }
             }, { once: true });
 
             videoEl.addEventListener('timeupdate', () => {
@@ -460,7 +561,7 @@
             videoEl.addEventListener('ended', () => refreshPlayPauseIcon(slot));
 
             refreshStageLayout();
-            renderPickerList(); /* re-render to update "add" button states */
+            renderPickerList(); /* re-render to update "add" button states + overlap filter */
             updateSyncBarDuration();
             setSyncStatus(`Added "${recording.display_title || recording.channel}".`, 'synced');
         };
@@ -504,6 +605,9 @@
             updateSyncBarDuration();
 
             if (slots.length === 0) setSyncStatus('', '');
+            /* renderPickerList() above already re-applies the overlap filter;
+               when slots is now empty, getActiveWindowMs() returns null and
+               all recordings become available again automatically */
         };
 
         /* ── Sync engine ── */
@@ -613,8 +717,10 @@
             if (!slot) return;
             const vol = Math.max(0, Math.min(1, Number(rawValue) || 0));
             slot.volume = vol;
-            /* gainNode controls volume through the Web Audio graph; fall back to
-               video.volume when AudioContext is unavailable or not yet wired */
+            /* Once the audio graph is wired, the gain node is the sole volume
+               control; videoEl.volume stays at 1 so it never silently multiplies.
+               Before the graph is wired (no AudioContext yet), fall back to
+               videoEl.volume directly so the slider still has an effect. */
             if (slot.gainNode) {
                 slot.gainNode.gain.value = vol;
             } else if (slot.videoEl) {
@@ -659,6 +765,9 @@
                 slot.audioSourceNode = source;
                 slot.gainNode        = gain;
                 slot.pannerNode      = panner;
+                /* Ensure the element-level volume is full so it never mutes
+                   the gain node's output as a silent multiplier */
+                slot.videoEl.volume = 1;
             } catch (_e) {
                 /* Older browsers without StereoPannerNode — graceful fallback */
             }
@@ -729,6 +838,7 @@
             const day    = filterDay.value || 'all';
             const query  = (filterSearch.value || '').trim().toLowerCase();
             const inSlot = new Set(slots.map((s) => s.recording.relative_path));
+            const win    = getActiveWindowMs(); /* null when no slots loaded */
 
             const filtered = allRecordings.filter((r) => {
                 if (ch  !== 'all' && r.channel !== ch)  return false;
@@ -737,6 +847,8 @@
                     const haystack = `${r.channel} ${r.display_title || ''} ${r.file_name || ''}`.toLowerCase();
                     if (!haystack.includes(query)) return false;
                 }
+                /* Once a slot is loaded, hide recordings with no time overlap */
+                if (win && !inSlot.has(r.relative_path) && !recOverlapsWindow(r, win)) return false;
                 return true;
             });
 
@@ -864,7 +976,7 @@
                 const sid   = decBtn.dataset.slotId;
                 const input = slotGrid.querySelector(`.mp-offset-input[data-slot-id="${sid}"]`);
                 if (input) {
-                    const next = (parseFloat(input.value) || 0) - 1;
+                    const next = Math.round(((parseFloat(input.value) || 0) - 0.1) * 10) / 10;
                     input.value = String(next);
                     applyUserOffset(sid, next);
                 }
@@ -876,7 +988,7 @@
                 const sid   = incBtn.dataset.slotId;
                 const input = slotGrid.querySelector(`.mp-offset-input[data-slot-id="${sid}"]`);
                 if (input) {
-                    const next = (parseFloat(input.value) || 0) + 1;
+                    const next = Math.round(((parseFloat(input.value) || 0) + 0.1) * 10) / 10;
                     input.value = String(next);
                     applyUserOffset(sid, next);
                 }
@@ -955,4 +1067,4 @@
     })();
     </script>
 </body>
-</html>vi
+</html>viid
