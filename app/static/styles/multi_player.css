@@ -77,6 +77,14 @@
     border-radius: 8px;
 }
 
+/* Picker toggle sits in the toolbar — match the toolbar button height */
+.mp-toolbar .mp-picker-toggle {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    padding: 0;
+}
+
 .mp-sync-status {
     margin-left: auto;
     font-size: 12px;
@@ -128,7 +136,6 @@
 .mp-picker-header-title-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 8px;
 }
 
@@ -136,13 +143,6 @@
     margin: 0;
     font-size: 14px;
     font-weight: 700;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.mp-picker-toggle {
-    flex-shrink: 0;
 }
 
 .mp-picker-filters {
