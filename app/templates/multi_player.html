@@ -121,7 +121,7 @@
                         <div>
                             <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#4f86b4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;margin:0 auto 12px"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
                             <p>Add recordings from the left panel to start watching.</p>
-                            <p style="font-size:12px;margin-top:4px">Up to 4 videos can be played at once. Only the primary slot plays audio.</p>
+                            <p style="font-size:12px;margin-top:4px">Up to 4 videos can be played at once. Use the volume sliders to control audio per slot.</p>
                         </div>
                     </div>
 
@@ -322,7 +322,6 @@
                         class="mp-slot-video"
                         preload="${isLive ? 'auto' : 'metadata'}"
                         playsinline
-                        muted
                     ></video>
                     <div class="mp-slot-overlay" id="overlay-${slot.id}">
                         <span class="mp-slot-overlay-text">Loading…</span>
@@ -423,11 +422,10 @@
             const slotEl = buildSlotEl(slot, slots.length - 1);
             slotGrid.appendChild(slotEl);
 
-            /* Wire video element — never muted at the HTML level; volume
-               is controlled entirely through the gain node / videoEl.volume */
+            /* Wire video element — volume is controlled entirely through
+               the gain node / videoEl.volume; never muted */
             const videoEl = slotEl.querySelector('.mp-slot-video');
             slot.videoEl = videoEl;
-            videoEl.muted = false;
             videoEl.volume = slot.volume;
             videoEl.src = recording.media_url;
 
