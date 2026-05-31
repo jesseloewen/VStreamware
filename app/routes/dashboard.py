@@ -1682,6 +1682,15 @@ def index() -> str:
     return render_template("main.html")
 
 
+@dashboard_bp.get("/multi-player")
+def multi_player() -> str:
+    services = get_services(current_app)
+    settings_store = services["settings_store"]
+    settings = settings_store.get_settings()
+    display_timezone = str(settings.get("display_timezone", "auto"))
+    return render_template("multi_player.html", display_timezone=display_timezone)
+
+
 @dashboard_bp.get("/Settings")
 def settings() -> str:
     services = get_services(current_app)

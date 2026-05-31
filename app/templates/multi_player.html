@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#141414">
+    <meta name="application-name" content="VStreamware">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="VStreamware">
+    <title>Multi-Player – VStreamware</title>
+    <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16x16.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/shared.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/multi_player.css') }}">
+</head>
+<body class="browser-page" data-transcode-status-url="{{ url_for('dashboard.transcode_queue_status') }}">
+    <main class="container">
+        <!-- ── Page header ── -->
+        <header class="page-header browser-header">
+            <h1 class="app-title">
+                <a class="app-title-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
+                    <img class="app-title-icon" src="{{ url_for('static', filename='icons/icon-64.png') }}" alt="VStreamware icon">
+                    <span>VStreamware</span>
+                </a>
+            </h1>
+            <div class="header-actions">
+                <div class="header-transcode-indicator" id="header-transcode-indicator" hidden role="status" aria-live="polite" aria-atomic="true">
+                    <span class="header-transcode-dot" aria-hidden="true"></span>
+                    <span class="header-transcode-label" id="header-transcode-label">Transcoding</span>
+                </div>
+                <a class="header-icon-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
+                    <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 10.5 12 3l9 7.5"></path>
+                        <path d="M5 9.5V21h14V9.5"></path>
+                    </svg>
+                    <span class="sr-only">Home</span>
+                </a>
+            </div>
+        </header>
+
+        <!-- ── Multi-player shell ── -->
+        <div class="multi-player-page">
+
+            <!-- Toolbar -->
+            <div class="mp-toolbar" role="toolbar" aria-label="Multi-player controls">
+                <span class="mp-toolbar-title">Multi-Player</span>
+                <span class="mp-toolbar-sep" aria-hidden="true"></span>
+                <div class="mp-toolbar-actions">
+                    <button type="button" id="mp-play-all" aria-label="Play all videos">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none" aria-hidden="true" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M8 5v14l11-7z"/></svg>
+                        Play All
+                    </button>
+                    <button type="button" id="mp-pause-all" class="secondary" aria-label="Pause all videos">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none" aria-hidden="true" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                        Pause All
+                    </button>
+                    <button type="button" id="mp-sync-now" class="secondary" aria-label="Re-sync all videos to the primary video's current time">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                        Re-sync
+                    </button>
+                    <button type="button" id="mp-clear-all" class="danger" aria-label="Remove all videos from the player">Clear All</button>
+                </div>
+                <span class="mp-sync-status" id="mp-sync-status" aria-live="polite"></span>
+            </div>
+
+            <!-- Body: picker + stage -->
+            <div class="mp-body">
+
+                <!-- ── Left: recording picker ── -->
+                <aside class="mp-picker-panel" aria-label="Recording picker">
+                    <div class="mp-picker-header">
+                        <h3>Pick Recordings</h3>
+                        <div class="mp-picker-filters">
+                            <select id="mp-filter-channel" aria-label="Filter by channel">
+                                <option value="all">All channels</option>
+                            </select>
+                            <select id="mp-filter-day" aria-label="Filter by day">
+                                <option value="all">All days</option>
+                            </select>
+                        </div>
+                        <div class="mp-picker-search">
+                            <input type="search" id="mp-filter-search" placeholder="Search titles…" autocomplete="off" spellcheck="false" aria-label="Search recordings">
+                        </div>
+                    </div>
+                    <div class="mp-picker-list" id="mp-picker-list" role="list" aria-label="Available recordings">
+                        <p class="mp-picker-empty" id="mp-picker-empty">Loading recordings…</p>
+                    </div>
+                </aside>
+
+                <!-- ── Right: video stage ── -->
+                <section class="mp-stage" aria-label="Video stage">
+
+                    <!-- Global sync bar -->
+                    <div class="mp-sync-bar" id="mp-sync-bar" hidden aria-label="Global playback sync">
+                        <span class="mp-sync-bar-label">Sync position</span>
+                        <span class="mp-sync-time" id="mp-sync-time">0:00</span>
+                        <input
+                            type="range"
+                            id="mp-sync-seek"
+                            class="mp-sync-seek"
+                            min="0"
+                            max="0"
+                            step="0.1"
+                            value="0"
+                            aria-label="Global sync seek"
+                        >
+                        <span class="mp-sync-time" id="mp-sync-duration">0:00</span>
+                        <div class="mp-sync-actions">
+                            <button type="button" id="mp-seek-back" class="secondary" aria-label="Seek back 10 seconds">−10s</button>
+                            <button type="button" id="mp-seek-forward" class="secondary" aria-label="Seek forward 10 seconds">+10s</button>
+                        </div>
+                    </div>
+
+                    <!-- Empty placeholder -->
+                    <div class="mp-stage-empty" id="mp-stage-empty">
+                        <div>
+                            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#4f86b4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;margin:0 auto 12px"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                            <p>Add recordings from the left panel to start watching.</p>
+                            <p style="font-size:12px;margin-top:4px">Up to 4 videos can be played at once. Only the primary slot plays audio.</p>
+                        </div>
+                    </div>
+
+                    <!-- Slot grid (populated by JS) -->
+                    <div class="mp-slot-grid" id="mp-slot-grid" data-count="0" hidden></div>
+
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <script>
+    (() => {
+        'use strict';
+
+        /* ── Constants ── */
+        const MAX_SLOTS       = 4;
+        const SYNC_INTERVAL_MS = 500;   /* how often we nudge drifted players */
+        const DRIFT_TOLERANCE_S = 0.35; /* seconds of drift before correcting */
+        const SEEK_STEP_S      = 10;
+        const FALLBACK_THUMB   = {{ url_for('static', filename='icons/icon-64.png') | tojson }};
+        const RECORDINGS_INDEX = {{ url_for('dashboard.recordings_index') | tojson }};
+        const DISPLAY_TZ_PREF  = {{ display_timezone | tojson }};
+
+        /* ── State ── */
+        let allRecordings    = [];   /* full catalog from API */
+        let channelDays      = {};
+        let slots            = [];   /* array of slot objects (max 4) */
+        let primarySlotIndex = 0;    /* which slot drives global time */
+        let syncTimer        = null;
+        let isSeeking        = false;
+        let catalogSignature = '';
+
+        /* ── DOM refs ── */
+        const pickerList     = document.getElementById('mp-picker-list');
+        const pickerEmpty    = document.getElementById('mp-picker-empty');
+        const filterChannel  = document.getElementById('mp-filter-channel');
+        const filterDay      = document.getElementById('mp-filter-day');
+        const filterSearch   = document.getElementById('mp-filter-search');
+        const slotGrid       = document.getElementById('mp-slot-grid');
+        const stageEmpty     = document.getElementById('mp-stage-empty');
+        const syncBar        = document.getElementById('mp-sync-bar');
+        const syncTimeEl     = document.getElementById('mp-sync-time');
+        const syncDurationEl = document.getElementById('mp-sync-duration');
+        const syncSeek       = document.getElementById('mp-sync-seek');
+        const syncStatusEl   = document.getElementById('mp-sync-status');
+        const btnPlayAll     = document.getElementById('mp-play-all');
+        const btnPauseAll    = document.getElementById('mp-pause-all');
+        const btnSyncNow     = document.getElementById('mp-sync-now');
+        const btnClearAll    = document.getElementById('mp-clear-all');
+        const btnSeekBack    = document.getElementById('mp-seek-back');
+        const btnSeekFwd     = document.getElementById('mp-seek-forward');
+
+        /* ── Helpers ── */
+        const escHtml = (v) => String(v ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+        const fmtTime = (secs) => {
+            if (!Number.isFinite(secs) || secs < 0) return '0:00';
+            const s = Math.floor(secs);
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+            return `${m}:${String(sec).padStart(2, '0')}`;
+        };
+
+        const fmtDateTime = (isoStr) => {
+            if (!isoStr) return '';
+            const d = new Date(isoStr);
+            if (isNaN(d.getTime())) return isoStr;
+            const tz = (DISPLAY_TZ_PREF && DISPLAY_TZ_PREF !== 'auto') ? DISPLAY_TZ_PREF : undefined;
+            try { return d.toLocaleString(undefined, tz ? { timeZone: tz } : undefined); }
+            catch { return d.toLocaleString(); }
+        };
+
+        const setSyncStatus = (msg, kind = '') => {
+            if (!syncStatusEl) return;
+            syncStatusEl.textContent = msg;
+            syncStatusEl.className = 'mp-sync-status'
+                + (kind === 'synced' ? ' is-synced' : kind === 'error' ? ' is-error' : '');
+        };
+
+        /* ── UTC-wall-clock → playback-seconds conversion ──
+         *
+         * Each recording has a recording_start_utc_ms value.  When all recordings
+         * originate from the same real-world event (e.g. a Twitch stream), they
+         * all share the same wall-clock timeline.  We pick the PRIMARY slot's
+         * recording_start_utc_ms as the "epoch" and express every other recording's
+         * position as:
+         *
+         *   playbackSeconds = wallClockOffsetFromEpoch + slotUserOffsetSeconds
+         *
+         * where wallClockOffsetFromEpoch = (slot.startUtcMs - epoch) / 1000.
+         *
+         * If a recording has no startUtcMs we fall back to treating it as
+         * zero-offset (i.e. all videos started at the same time).
+         */
+        const getEpochMs = () => {
+            if (slots.length === 0) return null;
+            const primary = slots[primarySlotIndex] || slots[0];
+            return primary.startUtcMs || null;
+        };
+
+        /* Compute the wall-clock "absolute" seconds for a given playback position
+         * in the primary slot. Returns null if epoch is unavailable. */
+        const primaryPlaybackToWallClock = (playbackSecs) => {
+            const epoch = getEpochMs();
+            if (epoch === null) return null;
+            return epoch / 1000 + playbackSecs;
+        };
+
+        /* For a given slot, what playback position corresponds to a wall-clock
+         * absolute second (from primaryPlaybackToWallClock)? */
+        const wallClockToSlotPlayback = (slot, wallClockSecs) => {
+            if (!slot.startUtcMs || !getEpochMs()) {
+                /* No UTC info – just mirror the primary position */
+                return wallClockSecs - (getEpochMs() || 0) / 1000;
+            }
+            const slotOffsetSecs = (slot.startUtcMs - getEpochMs()) / 1000;
+            return wallClockSecs - slotOffsetSecs / 1 + slot.userOffsetSecs;
+        };
+
+        /* Simpler form: given the PRIMARY slot's currentTime, what time should
+         * a peer slot be at (accounting for UTC offsets + user tweak)? */
+        const targetTimeForSlot = (primaryCurrentTime, slotIndex) => {
+            const primary = slots[primarySlotIndex] || slots[0];
+            const slot    = slots[slotIndex];
+            if (!slot || slot === primary) return primaryCurrentTime;
+
+            /* Delta in wall-clock seconds between the two recordings' starts */
+            const utcDelta = (primary.startUtcMs && slot.startUtcMs)
+                ? (slot.startUtcMs - primary.startUtcMs) / 1000
+                : 0;
+
+            /* slot should be at: primaryTime - utcDelta + slot's user offset
+             * (subtracting utcDelta: if slot started later, its t=0 is further
+             *  along the wall-clock, so we need a smaller playback position) */
+            return primaryCurrentTime - utcDelta + slot.userOffsetSecs;
+        };
+
+        /* ── Slot creation ── */
+        const createSlotObject = (recording) => ({
+            id: `slot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            recording,
+            startUtcMs: Number(recording.recording_start_utc_ms) || null,
+            userOffsetSecs: 0,
+            videoEl: null,
+            isAudioMuted: true,     /* muted by default; only primary plays audio */
+        });
+
+        /* ── DOM slot builder ── */
+        const buildSlotEl = (slot, index) => {
+            const rec  = slot.recording;
+            const isLive = Boolean(rec.is_live);
+            const label = escHtml(`${rec.channel} – ${rec.display_title || rec.file_name}`);
+
+            const el = document.createElement('div');
+            el.className = 'mp-slot';
+            el.dataset.slotId = slot.id;
+            el.innerHTML = `
+                <div class="mp-slot-header">
+                    ${isLive ? '<span class="mp-slot-live-dot" title="Live" aria-label="Live"></span>' : ''}
+                    <span class="mp-slot-label" title="${label}">${label}</span>
+                    <div class="mp-slot-badges">
+                        <button type="button" class="mp-slot-ctrl-btn mp-slot-audio-btn" data-slot-id="${slot.id}"
+                            aria-label="Toggle audio for this slot" title="Toggle audio (only one slot plays audio at a time)">
+                            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                            </svg>
+                        </button>
+                        <button type="button" class="mp-slot-remove-btn" data-slot-id="${slot.id}"
+                            aria-label="Remove this video">✕</button>
+                    </div>
+                </div>
+
+                <div class="mp-slot-video-wrap">
+                    <video
+                        class="mp-slot-video"
+                        preload="${isLive ? 'auto' : 'metadata'}"
+                        playsinline
+                        muted
+                    ></video>
+                    <div class="mp-slot-overlay" id="overlay-${slot.id}">
+                        <span class="mp-slot-overlay-text">Loading…</span>
+                    </div>
+                </div>
+
+                <div class="mp-slot-controls">
+                    <button type="button" class="mp-slot-ctrl-btn mp-slot-play-btn" data-slot-id="${slot.id}"
+                        aria-label="Play/Pause this video">
+                        <svg class="mp-icon-play" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                        <svg class="mp-icon-pause" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" hidden>
+                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                        </svg>
+                    </button>
+
+                    <div class="mp-offset-group" aria-label="Time offset adjustment">
+                        <span class="mp-offset-label">Offset</span>
+                        <button type="button" class="mp-offset-dec" data-slot-id="${slot.id}"
+                            aria-label="Decrease offset by 1 second">−</button>
+                        <input
+                            type="number"
+                            class="mp-offset-input"
+                            data-slot-id="${slot.id}"
+                            value="0"
+                            step="0.5"
+                            aria-label="Time offset in seconds (positive = delay this video)"
+                        >
+                        <button type="button" class="mp-offset-inc" data-slot-id="${slot.id}"
+                            aria-label="Increase offset by 1 second">+</button>
+                    </div>
+
+                    <span class="mp-slot-time" id="time-${slot.id}">0:00</span>
+                </div>
+            `;
+            return el;
+        };
+
+        /* ── Stage layout refresh ── */
+        const refreshStageLayout = () => {
+            const count = slots.length;
+            slotGrid.dataset.count = String(count);
+
+            if (count === 0) {
+                slotGrid.hidden = true;
+                stageEmpty.hidden = false;
+                syncBar.hidden = true;
+            } else {
+                slotGrid.hidden = false;
+                stageEmpty.hidden = true;
+                syncBar.hidden = false;
+            }
+
+            /* Mark audio-primary slot button */
+            slotGrid.querySelectorAll('.mp-slot-audio-btn').forEach((btn) => {
+                const sid = btn.dataset.slotId;
+                const idx = slots.findIndex((s) => s.id === sid);
+                const isPrimary = idx === primarySlotIndex;
+                btn.classList.toggle('is-audio-primary', isPrimary);
+                btn.title = isPrimary ? 'Audio: ON (click to mute)' : 'Audio: muted (click for audio)';
+            });
+        };
+
+        /* ── Add a recording to the stage ── */
+        const addSlot = (recording) => {
+            if (slots.length >= MAX_SLOTS) {
+                setSyncStatus(`Max ${MAX_SLOTS} videos reached.`, 'error');
+                return;
+            }
+
+            /* Prevent duplicate */
+            if (slots.some((s) => s.recording.relative_path === recording.relative_path)) {
+                setSyncStatus('Already in player.', '');
+                return;
+            }
+
+            const slot = createSlotObject(recording);
+
+            /* If this is the first slot, it gets audio */
+            slot.isAudioMuted = slots.length > 0;
+
+            slots.push(slot);
+            primarySlotIndex = 0; /* always keep slot 0 as primary */
+
+            const slotEl = buildSlotEl(slot, slots.length - 1);
+            slotGrid.appendChild(slotEl);
+
+            /* Wire video element */
+            const videoEl = slotEl.querySelector('.mp-slot-video');
+            slot.videoEl = videoEl;
+            videoEl.muted = slot.isAudioMuted;
+            videoEl.src = recording.media_url;
+
+            /* Hide loading overlay once loadedmetadata fires */
+            const overlay = document.getElementById(`overlay-${slot.id}`);
+            videoEl.addEventListener('loadedmetadata', () => {
+                if (overlay) overlay.classList.add('is-hidden');
+                updateSyncBarDuration();
+            }, { once: true });
+
+            videoEl.addEventListener('timeupdate', () => {
+                const timeEl = document.getElementById(`time-${slot.id}`);
+                if (timeEl) timeEl.textContent = fmtTime(videoEl.currentTime);
+                if (slots[primarySlotIndex]?.id === slot.id) {
+                    updateSyncBarPosition();
+                }
+            });
+
+            videoEl.addEventListener('play', () => refreshPlayPauseIcon(slot));
+            videoEl.addEventListener('pause', () => refreshPlayPauseIcon(slot));
+            videoEl.addEventListener('ended', () => refreshPlayPauseIcon(slot));
+
+            refreshStageLayout();
+            renderPickerList(); /* re-render to update "add" button states */
+            updateSyncBarDuration();
+            setSyncStatus(`Added "${recording.display_title || recording.channel}".`, 'synced');
+        };
+
+        const refreshPlayPauseIcon = (slot) => {
+            if (!slot.videoEl) return;
+            const slotEl = slotGrid.querySelector(`[data-slot-id="${slot.id}"]`);
+            if (!slotEl) return;
+            const playBtn = slotEl.querySelector(`.mp-slot-play-btn`);
+            if (!playBtn) return;
+            const paused = slot.videoEl.paused || slot.videoEl.ended;
+            const playIcon  = playBtn.querySelector('.mp-icon-play');
+            const pauseIcon = playBtn.querySelector('.mp-icon-pause');
+            if (playIcon)  playIcon.hidden  = !paused;
+            if (pauseIcon) pauseIcon.hidden = paused;
+        };
+
+        /* ── Remove a slot ── */
+        const removeSlot = (slotId) => {
+            const idx = slots.findIndex((s) => s.id === slotId);
+            if (idx < 0) return;
+
+            const slot = slots[idx];
+            if (slot.videoEl) {
+                slot.videoEl.pause();
+                slot.videoEl.src = '';
+            }
+
+            const slotEl = slotGrid.querySelector(`.mp-slot[data-slot-id="${slotId}"]`);
+            if (slotEl) slotEl.remove();
+
+            slots.splice(idx, 1);
+
+            /* Keep primarySlotIndex valid */
+            if (primarySlotIndex >= slots.length) primarySlotIndex = Math.max(0, slots.length - 1);
+
+            refreshStageLayout();
+            renderPickerList();
+            updateSyncBarDuration();
+
+            if (slots.length === 0) setSyncStatus('', '');
+        };
+
+        /* ── Audio routing: only one slot plays audio ── */
+        const setAudioPrimary = (slotId) => {
+            const idx = slots.findIndex((s) => s.id === slotId);
+            if (idx < 0) return;
+            primarySlotIndex = idx;
+            slots.forEach((s, i) => {
+                s.isAudioMuted = i !== idx;
+                if (s.videoEl) s.videoEl.muted = s.isAudioMuted;
+            });
+            refreshStageLayout();
+        };
+
+        /* ── Sync engine ── */
+        const doSync = () => {
+            if (slots.length < 2 || isSeeking) return;
+            const primary = slots[primarySlotIndex];
+            if (!primary?.videoEl || primary.videoEl.readyState < 1) return;
+            const primaryTime = primary.videoEl.currentTime;
+
+            slots.forEach((slot, i) => {
+                if (i === primarySlotIndex) return;
+                if (!slot.videoEl || slot.videoEl.readyState < 1) return;
+                const target = targetTimeForSlot(primaryTime, i);
+                if (target < 0) {
+                    /* The peer recording hasn't started yet relative to primary */
+                    if (!slot.videoEl.paused) slot.videoEl.pause();
+                    return;
+                }
+                const drift = Math.abs(slot.videoEl.currentTime - target);
+                if (drift > DRIFT_TOLERANCE_S) {
+                    slot.videoEl.currentTime = target;
+                }
+            });
+        };
+
+        const startSyncTimer = () => {
+            if (syncTimer !== null) return;
+            syncTimer = window.setInterval(doSync, SYNC_INTERVAL_MS);
+        };
+
+        const stopSyncTimer = () => {
+            if (syncTimer === null) return;
+            window.clearInterval(syncTimer);
+            syncTimer = null;
+        };
+
+        /* ── Sync bar ── */
+        const updateSyncBarDuration = () => {
+            const primary = slots[primarySlotIndex];
+            if (!primary?.videoEl) { syncSeek.max = '0'; syncDurationEl.textContent = '0:00'; return; }
+            const dur = primary.videoEl.duration;
+            if (Number.isFinite(dur) && dur > 0) {
+                syncSeek.max = String(dur);
+                syncDurationEl.textContent = fmtTime(dur);
+            }
+        };
+
+        const updateSyncBarPosition = () => {
+            if (isSeeking) return;
+            const primary = slots[primarySlotIndex];
+            if (!primary?.videoEl) return;
+            const t = primary.videoEl.currentTime;
+            syncSeek.value = String(t);
+            syncTimeEl.textContent = fmtTime(t);
+        };
+
+        /* ── Play / Pause all ── */
+        const playAll = () => {
+            slots.forEach((s) => { if (s.videoEl && s.videoEl.paused) s.videoEl.play().catch(() => {}); });
+            startSyncTimer();
+            setSyncStatus('Playing.', 'synced');
+        };
+
+        const pauseAll = () => {
+            slots.forEach((s) => { if (s.videoEl && !s.videoEl.paused) s.videoEl.pause(); });
+            setSyncStatus('Paused.', '');
+        };
+
+        /* ── Full re-sync from primary ── */
+        const reSyncAll = () => {
+            const primary = slots[primarySlotIndex];
+            if (!primary?.videoEl) return;
+            const primaryTime = primary.videoEl.currentTime;
+            slots.forEach((s, i) => {
+                if (i === primarySlotIndex || !s.videoEl) return;
+                const target = targetTimeForSlot(primaryTime, i);
+                if (target >= 0) s.videoEl.currentTime = target;
+            });
+            setSyncStatus('Re-synced.', 'synced');
+        };
+
+        /* ── Global seek ── */
+        const seekAllTo = (primaryTargetTime) => {
+            const clamped = Math.max(0, primaryTargetTime);
+            slots.forEach((s, i) => {
+                if (!s.videoEl) return;
+                if (i === primarySlotIndex) {
+                    s.videoEl.currentTime = clamped;
+                } else {
+                    const target = targetTimeForSlot(clamped, i);
+                    if (target >= 0) s.videoEl.currentTime = target;
+                }
+            });
+        };
+
+        /* ── User offset change ── */
+        const applyUserOffset = (slotId, newOffsetSecs) => {
+            const slot = slots.find((s) => s.id === slotId);
+            if (!slot) return;
+            slot.userOffsetSecs = Number(newOffsetSecs) || 0;
+            /* Immediately re-sync */
+            reSyncAll();
+            const input = slotGrid.querySelector(`.mp-offset-input[data-slot-id="${slotId}"]`);
+            if (input) {
+                input.classList.toggle('is-nonzero', slot.userOffsetSecs !== 0);
+            }
+        };
+
+        /* ── Picker rendering ── */
+        const buildChannelDays = (recordings) => {
+            const map = {};
+            recordings.forEach((r) => {
+                const ch = r.channel || 'unknown';
+                if (!map[ch]) map[ch] = new Set();
+                map[ch].add(r.day || 'unknown');
+            });
+            const out = {};
+            for (const [ch, days] of Object.entries(map)) {
+                out[ch] = Array.from(days).sort((a, b) => b.localeCompare(a));
+            }
+            return out;
+        };
+
+        const populatePickerFilters = (channels) => {
+            const prevCh  = filterChannel.value || 'all';
+            const prevDay = filterDay.value || 'all';
+            filterChannel.innerHTML = '<option value="all">All channels</option>';
+            const sorted = [...channels].sort((a, b) => a.localeCompare(b));
+            sorted.forEach((ch) => {
+                const opt = document.createElement('option');
+                opt.value = ch; opt.textContent = ch;
+                filterChannel.appendChild(opt);
+            });
+            filterChannel.value = sorted.includes(prevCh) ? prevCh : 'all';
+            populateDayFilter(prevDay);
+        };
+
+        const populateDayFilter = (prevDay = 'all') => {
+            const ch = filterChannel.value || 'all';
+            const daySet = new Set();
+            if (ch === 'all') {
+                Object.values(channelDays).forEach((days) => days.forEach((d) => daySet.add(d)));
+            } else {
+                (channelDays[ch] || []).forEach((d) => daySet.add(d));
+            }
+            const dayVals = Array.from(daySet).sort((a, b) => b.localeCompare(a));
+            filterDay.innerHTML = '<option value="all">All days</option>';
+            dayVals.forEach((d) => {
+                const opt = document.createElement('option');
+                opt.value = d; opt.textContent = d;
+                filterDay.appendChild(opt);
+            });
+            filterDay.value = dayVals.includes(prevDay) ? prevDay : 'all';
+        };
+
+        const renderPickerList = () => {
+            const ch     = filterChannel.value || 'all';
+            const day    = filterDay.value || 'all';
+            const query  = (filterSearch.value || '').trim().toLowerCase();
+            const inSlot = new Set(slots.map((s) => s.recording.relative_path));
+
+            const filtered = allRecordings.filter((r) => {
+                if (ch  !== 'all' && r.channel !== ch)  return false;
+                if (day !== 'all' && r.day     !== day) return false;
+                if (query) {
+                    const haystack = `${r.channel} ${r.display_title || ''} ${r.file_name || ''}`.toLowerCase();
+                    if (!haystack.includes(query)) return false;
+                }
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                pickerList.innerHTML = '';
+                pickerEmpty.hidden = false;
+                pickerEmpty.textContent = allRecordings.length === 0 ? 'Loading recordings…' : 'No recordings match.';
+                return;
+            }
+
+            pickerEmpty.hidden = true;
+
+            const fragment = document.createDocumentFragment();
+            filtered.forEach((rec) => {
+                const alreadyAdded = inSlot.has(rec.relative_path);
+                const slotsFull    = slots.length >= MAX_SLOTS;
+                const thumb = escHtml(rec.thumbnail_url || FALLBACK_THUMB);
+                const title = escHtml(rec.display_title || rec.file_name || 'recording');
+                const sub   = escHtml(`${rec.channel} · ${rec.day}${rec.is_live ? ' · LIVE' : ''}`);
+                const startedAt = rec.started_at
+                    ? fmtDateTime(rec.started_at)
+                    : (rec.recorded_at ? fmtDateTime(rec.recorded_at) : '');
+
+                const item = document.createElement('div');
+                item.className = 'mp-pick-item' + (alreadyAdded ? ' is-selected' : '') + (rec.is_live ? ' is-live' : '');
+                item.role = 'listitem';
+                item.dataset.path = rec.relative_path;
+                item.innerHTML = `
+                    <img class="mp-pick-thumb" src="${thumb}" alt="" loading="lazy" decoding="async">
+                    <div class="mp-pick-meta">
+                        <p class="mp-pick-title" title="${title}">${title}</p>
+                        <p class="mp-pick-sub">${sub}${startedAt ? ' · ' + escHtml(startedAt) : ''}</p>
+                    </div>
+                    <div class="mp-pick-badges">
+                        <button
+                            type="button"
+                            class="mp-pick-add-btn ${alreadyAdded ? 'secondary' : ''}"
+                            data-path="${escHtml(rec.relative_path)}"
+                            aria-label="${alreadyAdded ? 'Already added' : 'Add to player'}"
+                            ${alreadyAdded || slotsFull ? 'disabled' : ''}
+                        >${alreadyAdded ? 'Added' : 'Add'}</button>
+                    </div>
+                `;
+                fragment.appendChild(item);
+            });
+
+            pickerList.innerHTML = '';
+            pickerList.appendChild(fragment);
+        };
+
+        /* ── Catalog fetch ── */
+        const fetchCatalog = async ({ force = false } = {}) => {
+            try {
+                const res = await fetch(RECORDINGS_INDEX, {
+                    cache: 'no-store',
+                    headers: { 'X-Requested-With': 'vstreamware-multi-player' },
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const payload = await res.json();
+                const sig = typeof payload.signature === 'string' ? payload.signature : '';
+                if (!force && sig && sig === catalogSignature) return;
+                catalogSignature = sig;
+
+                allRecordings = (payload.recordings || []).map((r) => ({
+                    channel:               String(r.channel || ''),
+                    day:                   String(r.day || 'unknown'),
+                    file_name:             String(r.file_name || ''),
+                    display_title:         String(r.display_title || r.file_name || ''),
+                    relative_path:         String(r.relative_path || ''),
+                    media_url:             String(r.media_url || ''),
+                    thumbnail_url:         String(r.thumbnail_url || ''),
+                    view_url:              String(r.view_url || ''),
+                    recorded_at:           String(r.recorded_at || ''),
+                    recorded_at_unix:      Number(r.recorded_at_unix) || 0,
+                    started_at:            r.started_at ? String(r.started_at) : '',
+                    recording_start_utc_ms: Number(r.recording_start_utc_ms) || 0,
+                    size_bytes:            Number(r.size_bytes) || 0,
+                    is_live:               Boolean(r.is_live),
+                    can_play:              Boolean(r.can_play),
+                    quality:               r.quality ? String(r.quality) : '',
+                    media_duration_seconds: Number(r.media_duration_seconds) || 0,
+                }));
+
+                channelDays = buildChannelDays(allRecordings);
+                populatePickerFilters((payload.channels || []).map(String));
+                renderPickerList();
+            } catch (err) {
+                console.error('Multi-player catalog fetch failed:', err);
+            }
+        };
+
+        /* ── Picker click delegation ── */
+        pickerList.addEventListener('click', (e) => {
+            const btn = e.target.closest('.mp-pick-add-btn');
+            if (!btn || btn.disabled) return;
+            const path = btn.dataset.path;
+            const rec  = allRecordings.find((r) => r.relative_path === path);
+            if (rec) addSlot(rec);
+        });
+
+        /* ── Stage click delegation ── */
+        slotGrid.addEventListener('click', (e) => {
+            /* Remove button */
+            const removeBtn = e.target.closest('.mp-slot-remove-btn');
+            if (removeBtn) { removeSlot(removeBtn.dataset.slotId); return; }
+
+            /* Audio toggle */
+            const audioBtn = e.target.closest('.mp-slot-audio-btn');
+            if (audioBtn) { setAudioPrimary(audioBtn.dataset.slotId); return; }
+
+            /* Per-slot play/pause */
+            const playBtn = e.target.closest('.mp-slot-play-btn');
+            if (playBtn) {
+                const sid  = playBtn.dataset.slotId;
+                const slot = slots.find((s) => s.id === sid);
+                if (!slot?.videoEl) return;
+                if (slot.videoEl.paused) {
+                    slot.videoEl.play().catch(() => {});
+                    startSyncTimer();
+                } else {
+                    slot.videoEl.pause();
+                }
+                return;
+            }
+
+            /* Offset dec/inc */
+            const decBtn = e.target.closest('.mp-offset-dec');
+            if (decBtn) {
+                const sid   = decBtn.dataset.slotId;
+                const input = slotGrid.querySelector(`.mp-offset-input[data-slot-id="${sid}"]`);
+                if (input) {
+                    const next = (parseFloat(input.value) || 0) - 1;
+                    input.value = String(next);
+                    applyUserOffset(sid, next);
+                }
+                return;
+            }
+
+            const incBtn = e.target.closest('.mp-offset-inc');
+            if (incBtn) {
+                const sid   = incBtn.dataset.slotId;
+                const input = slotGrid.querySelector(`.mp-offset-input[data-slot-id="${sid}"]`);
+                if (input) {
+                    const next = (parseFloat(input.value) || 0) + 1;
+                    input.value = String(next);
+                    applyUserOffset(sid, next);
+                }
+                return;
+            }
+        });
+
+        /* Offset input: direct entry */
+        slotGrid.addEventListener('change', (e) => {
+            if (!e.target.classList.contains('mp-offset-input')) return;
+            const sid = e.target.dataset.slotId;
+            applyUserOffset(sid, parseFloat(e.target.value) || 0);
+        });
+
+        /* ── Toolbar buttons ── */
+        btnPlayAll.addEventListener('click', playAll);
+        btnPauseAll.addEventListener('click', pauseAll);
+        btnSyncNow.addEventListener('click', reSyncAll);
+        btnClearAll.addEventListener('click', () => {
+            [...slots].forEach((s) => removeSlot(s.id));
+            setSyncStatus('', '');
+        });
+        btnSeekBack.addEventListener('click', () => {
+            const primary = slots[primarySlotIndex];
+            if (!primary?.videoEl) return;
+            seekAllTo(primary.videoEl.currentTime - SEEK_STEP_S);
+        });
+        btnSeekFwd.addEventListener('click', () => {
+            const primary = slots[primarySlotIndex];
+            if (!primary?.videoEl) return;
+            seekAllTo(primary.videoEl.currentTime + SEEK_STEP_S);
+        });
+
+        /* ── Global sync seek slider ── */
+        syncSeek.addEventListener('mousedown', () => { isSeeking = true; });
+        syncSeek.addEventListener('touchstart', () => { isSeeking = true; }, { passive: true });
+        syncSeek.addEventListener('input', () => {
+            syncTimeEl.textContent = fmtTime(parseFloat(syncSeek.value));
+        });
+        syncSeek.addEventListener('change', () => {
+            seekAllTo(parseFloat(syncSeek.value));
+            isSeeking = false;
+        });
+        syncSeek.addEventListener('mouseup', () => { isSeeking = false; });
+        syncSeek.addEventListener('touchend', () => { isSeeking = false; });
+
+        /* ── Picker filters ── */
+        filterChannel.addEventListener('change', () => { populateDayFilter(); renderPickerList(); });
+        filterDay.addEventListener('change', renderPickerList);
+        filterSearch.addEventListener('input', renderPickerList);
+
+        /* ── Visibility / cleanup ── */
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) { stopSyncTimer(); return; }
+            if (slots.some((s) => s.videoEl && !s.videoEl.paused)) startSyncTimer();
+            fetchCatalog();
+        });
+        window.addEventListener('beforeunload', stopSyncTimer);
+
+        /* ── Boot ── */
+        fetchCatalog({ force: true });
+        /* Poll catalog every 10 s */
+        window.setInterval(() => fetchCatalog(), 10_000);
+    })();
+    </script>
+</body>
+</html>

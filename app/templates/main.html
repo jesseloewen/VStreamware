@@ -62,9 +62,15 @@
 
             <section class="browser-main-column">
                 <section class="card video-browser-card">
-                    <div class="video-browser-header">
+                                        <div class="video-browser-header">
                         <h2>Video Browser</h2>
-                        <button type="button" class="secondary" id="refresh-video-browser">Refresh</button>
+                        <div style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <a class="button-link" href="{{ url_for('dashboard.multi_player') }}" style="font-size:13px;padding:8px 12px;" aria-label="Open multi-player">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:5px;vertical-align:middle;"><rect x="2" y="3" width="9" height="8" rx="1"/><rect x="13" y="3" width="9" height="8" rx="1"/><rect x="2" y="13" width="9" height="8" rx="1"/><rect x="13" y="13" width="9" height="8" rx="1"/></svg>
+                                Multi-Player
+                            </a>
+                            <button type="button" class="secondary" id="refresh-video-browser">Refresh</button>
+                        </div>
                     </div>
                     <p class="muted">Newest videos are shown first by default. Filter by channel or day to browse specific folders.</p>
 
