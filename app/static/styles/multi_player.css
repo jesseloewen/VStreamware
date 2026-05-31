@@ -317,8 +317,8 @@
 .mp-sync-actions {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    flex-wrap: nowrap;
+    gap: 4px;
+    flex-shrink: 0;
 }
 
 .mp-sync-actions button {
@@ -327,6 +327,24 @@
     line-height: 1.2;
     border-radius: 7px;
     white-space: nowrap;
+}
+
+/* Icon-only square buttons in the sync bar */
+.mp-sync-icon-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.mp-sync-icon-btn svg {
+    width: 14px;
+    height: 14px;
+    display: block;
 }
 
 /* Empty stage placeholder — only shown when no slots exist */

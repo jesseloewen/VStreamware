@@ -64,18 +64,6 @@
                 </button>
                 <span class="mp-toolbar-sep" aria-hidden="true"></span>
                 <div class="mp-toolbar-actions">
-                    <button type="button" id="mp-play-all" aria-label="Play all videos">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none" aria-hidden="true" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M8 5v14l11-7z"/></svg>
-                        Play All
-                    </button>
-                    <button type="button" id="mp-pause-all" class="secondary" aria-label="Pause all videos">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none" aria-hidden="true" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                        Pause All
-                    </button>
-                    <button type="button" id="mp-sync-now" class="secondary" aria-label="Re-sync all videos to the primary video's current time">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-                        Re-sync
-                    </button>
                     <button type="button" id="mp-clear-all" class="danger" aria-label="Remove all videos from the player">Clear All</button>
                 </div>
                 <span class="mp-sync-status" id="mp-sync-status" aria-live="polite"></span>
@@ -112,7 +100,17 @@
 
                     <!-- Global sync bar -->
                     <div class="mp-sync-bar" id="mp-sync-bar" hidden aria-label="Global playback sync">
-                        <span class="mp-sync-bar-label">Sync position</span>
+                        <div class="mp-sync-actions">
+                            <button type="button" id="mp-play-pause-all" class="mp-sync-icon-btn" aria-label="Play all videos">
+                                <svg class="mp-icon-play" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                                <svg class="mp-icon-pause" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" hidden><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                            </button>
+                            <button type="button" id="mp-sync-now" class="mp-sync-icon-btn secondary" aria-label="Re-sync all videos to primary position">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+                            </button>
+                            <button type="button" id="mp-seek-back" class="secondary" aria-label="Seek back 10 seconds">−10s</button>
+                            <button type="button" id="mp-seek-forward" class="secondary" aria-label="Seek forward 10 seconds">+10s</button>
+                        </div>
                         <span class="mp-sync-time" id="mp-sync-time">0:00</span>
                         <input
                             type="range"
@@ -125,10 +123,6 @@
                             aria-label="Global sync seek"
                         >
                         <span class="mp-sync-time" id="mp-sync-duration">0:00</span>
-                        <div class="mp-sync-actions">
-                            <button type="button" id="mp-seek-back" class="secondary" aria-label="Seek back 10 seconds">−10s</button>
-                            <button type="button" id="mp-seek-forward" class="secondary" aria-label="Seek forward 10 seconds">+10s</button>
-                        </div>
                     </div>
 
                     <!-- Empty placeholder: removed from layout when hidden -->
@@ -182,13 +176,12 @@
         const syncTimeEl     = document.getElementById('mp-sync-time');
         const syncDurationEl = document.getElementById('mp-sync-duration');
         const syncSeek       = document.getElementById('mp-sync-seek');
-        const syncStatusEl   = document.getElementById('mp-sync-status');
-        const btnPlayAll     = document.getElementById('mp-play-all');
-        const btnPauseAll    = document.getElementById('mp-pause-all');
-        const btnSyncNow     = document.getElementById('mp-sync-now');
-        const btnClearAll    = document.getElementById('mp-clear-all');
-        const btnSeekBack    = document.getElementById('mp-seek-back');
-        const btnSeekFwd     = document.getElementById('mp-seek-forward');
+        const syncStatusEl      = document.getElementById('mp-sync-status');
+        const btnPlayPauseAll   = document.getElementById('mp-play-pause-all');
+        const btnSyncNow        = document.getElementById('mp-sync-now');
+        const btnClearAll       = document.getElementById('mp-clear-all');
+        const btnSeekBack       = document.getElementById('mp-seek-back');
+        const btnSeekFwd        = document.getElementById('mp-seek-forward');
         const pickerToggle   = document.getElementById('mp-picker-toggle');
 
         /* ── Picker collapse (mirrors saved-panel toggle pattern) ── */
@@ -549,6 +542,7 @@
 
             videoEl.addEventListener('play', () => {
                 refreshPlayPauseIcon(slot);
+                refreshGlobalPlayPauseIcon();
                 /* Wire audio graph on first play (requires user gesture) */
                 resumeAudioCtx();
                 wireAudioGraph(slot);
@@ -556,8 +550,8 @@
                 applyVolume(slot.id, slot.volume);
                 applyPan(slot.id, slot.pan);
             });
-            videoEl.addEventListener('pause', () => refreshPlayPauseIcon(slot));
-            videoEl.addEventListener('ended', () => refreshPlayPauseIcon(slot));
+            videoEl.addEventListener('pause', () => { refreshPlayPauseIcon(slot); refreshGlobalPlayPauseIcon(); });
+            videoEl.addEventListener('ended', () => { refreshPlayPauseIcon(slot); refreshGlobalPlayPauseIcon(); });
 
             refreshStageLayout();
             renderPickerList(); /* re-render to update "add" button states + overlap filter */
@@ -664,15 +658,29 @@
         };
 
         /* ── Play / Pause all ── */
+        const isAnyPlaying = () => slots.some((s) => s.videoEl && !s.videoEl.paused);
+
+        const refreshGlobalPlayPauseIcon = () => {
+            if (!btnPlayPauseAll) return;
+            const playing = isAnyPlaying();
+            const playIcon  = btnPlayPauseAll.querySelector('.mp-icon-play');
+            const pauseIcon = btnPlayPauseAll.querySelector('.mp-icon-pause');
+            if (playIcon)  playIcon.hidden  = playing;
+            if (pauseIcon) pauseIcon.hidden = !playing;
+            btnPlayPauseAll.setAttribute('aria-label', playing ? 'Pause all videos' : 'Play all videos');
+        };
+
         const playAll = () => {
             slots.forEach((s) => { if (s.videoEl && s.videoEl.paused) s.videoEl.play().catch(() => {}); });
             startSyncTimer();
             setSyncStatus('Playing.', 'synced');
+            refreshGlobalPlayPauseIcon();
         };
 
         const pauseAll = () => {
             slots.forEach((s) => { if (s.videoEl && !s.videoEl.paused) s.videoEl.pause(); });
             setSyncStatus('Paused.', '');
+            refreshGlobalPlayPauseIcon();
         };
 
         /* ── Full re-sync from primary ── */
@@ -1014,9 +1022,12 @@
             applyPan(e.target.dataset.slotId, e.target.value);
         });
 
-        /* ── Toolbar buttons ── */
-        btnPlayAll.addEventListener('click', playAll);
-        btnPauseAll.addEventListener('click', pauseAll);
+        /* ── Toolbar / sync-bar buttons ── */
+        if (btnPlayPauseAll) {
+            btnPlayPauseAll.addEventListener('click', () => {
+                if (isAnyPlaying()) pauseAll(); else playAll();
+            });
+        }
         btnSyncNow.addEventListener('click', reSyncAll);
         btnClearAll.addEventListener('click', () => {
             [...slots].forEach((s) => removeSlot(s.id));
