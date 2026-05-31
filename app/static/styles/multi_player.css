@@ -532,6 +532,59 @@
     color: #dcfce7;
 }
 
+/* ── Per-slot volume + pan controls ──────────────────────────────────────────── */
+
+.mp-slot-av-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.mp-av-row {
+    display: grid;
+    grid-template-columns: 26px 1fr 32px;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.mp-av-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    white-space: nowrap;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.mp-av-value {
+    font-size: 9px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #93c5fd;
+    white-space: nowrap;
+    text-align: left;
+    min-width: 0;
+}
+
+.mp-volume-slider,
+.mp-pan-slider {
+    width: 100%;
+    min-width: 0;
+    height: 14px;
+    accent-color: #4eb3ff;
+    cursor: pointer;
+}
+
+/* Centre-tick visual hint on the pan slider */
+.mp-pan-slider {
+    accent-color: #a78bfa;
+}
+
 /* Offset control */
 .mp-offset-group {
     display: inline-flex;

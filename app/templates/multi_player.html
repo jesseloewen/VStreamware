@@ -264,6 +264,22 @@
             return primaryCurrentTime - utcDelta + slot.userOffsetSecs;
         };
 
+        /* ── Shared AudioContext (created once, resumed on first play interaction) ── */
+        let sharedAudioCtx = null;
+
+        const getAudioCtx = () => {
+            if (!sharedAudioCtx) {
+                try { sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+                catch (_e) { sharedAudioCtx = null; }
+            }
+            return sharedAudioCtx;
+        };
+
+        const resumeAudioCtx = () => {
+            const ctx = getAudioCtx();
+            if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+        };
+
         /* ── Slot creation ── */
         const createSlotObject = (recording) => ({
             id: `slot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -272,6 +288,11 @@
             userOffsetSecs: 0,
             videoEl: null,
             isAudioMuted: true,     /* muted by default; only primary plays audio */
+            volume: 1,
+            pan: 0,
+            audioSourceNode: null,  /* MediaElementAudioSourceNode */
+            pannerNode: null,       /* StereoPannerNode */
+            gainNode: null,         /* GainNode for per-slot volume */
         });
 
         /* ── DOM slot builder ── */
@@ -312,33 +333,58 @@
                 </div>
 
                 <div class="mp-slot-controls">
-                    <button type="button" class="mp-slot-ctrl-btn mp-slot-play-btn" data-slot-id="${slot.id}"
-                        aria-label="Play/Pause this video">
-                        <svg class="mp-icon-play" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
-                            <path d="M8 5v14l11-7z"/>
-                        </svg>
-                        <svg class="mp-icon-pause" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" hidden>
-                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-                        </svg>
-                    </button>
+                <button type="button" class="mp-slot-ctrl-btn mp-slot-play-btn" data-slot-id="${slot.id}"
+                    aria-label="Play/Pause this video">
+                    <svg class="mp-icon-play" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                    <svg class="mp-icon-pause" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" hidden>
+                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                    </svg>
+                </button>
 
-                    <div class="mp-offset-group" aria-label="Time offset adjustment">
-                        <span class="mp-offset-label">Offset</span>
-                        <button type="button" class="mp-offset-dec" data-slot-id="${slot.id}"
-                            aria-label="Decrease offset by 1 second">−</button>
+                <div class="mp-slot-av-controls">
+                    <div class="mp-av-row">
+                        <span class="mp-av-label">Vol</span>
                         <input
-                            type="number"
-                            class="mp-offset-input"
+                            type="range"
+                            class="mp-volume-slider"
                             data-slot-id="${slot.id}"
-                            value="0"
-                            step="0.5"
-                            aria-label="Time offset in seconds (positive = delay this video)"
+                            min="0" max="1" step="0.02" value="1"
+                            aria-label="Volume"
                         >
-                        <button type="button" class="mp-offset-inc" data-slot-id="${slot.id}"
-                            aria-label="Increase offset by 1 second">+</button>
+                        <span class="mp-av-value mp-volume-value" id="vol-val-${slot.id}">100%</span>
                     </div>
+                    <div class="mp-av-row">
+                        <span class="mp-av-label">Pan</span>
+                        <input
+                            type="range"
+                            class="mp-pan-slider"
+                            data-slot-id="${slot.id}"
+                            min="-1" max="1" step="0.05" value="0"
+                            aria-label="Pan left/right"
+                        >
+                        <span class="mp-av-value mp-pan-value" id="pan-val-${slot.id}">C</span>
+                    </div>
+                </div>
 
-                    <span class="mp-slot-time" id="time-${slot.id}">0:00</span>
+                <div class="mp-offset-group" aria-label="Time offset adjustment">
+                    <span class="mp-offset-label">Offset</span>
+                    <button type="button" class="mp-offset-dec" data-slot-id="${slot.id}"
+                        aria-label="Decrease offset by 1 second">−</button>
+                    <input
+                        type="number"
+                        class="mp-offset-input"
+                        data-slot-id="${slot.id}"
+                        value="0"
+                        step="0.5"
+                        aria-label="Time offset in seconds (positive = delay this video)"
+                    >
+                    <button type="button" class="mp-offset-inc" data-slot-id="${slot.id}"
+                        aria-label="Increase offset by 1 second">+</button>
+                </div>
+
+                <span class="mp-slot-time" id="time-${slot.id}">0:00</span>
                 </div>
             `;
             return el;
@@ -414,7 +460,15 @@
                 }
             });
 
-            videoEl.addEventListener('play', () => refreshPlayPauseIcon(slot));
+            videoEl.addEventListener('play', () => {
+                refreshPlayPauseIcon(slot);
+                /* Wire audio graph on first play (requires user gesture) */
+                resumeAudioCtx();
+                wireAudioGraph(slot);
+                /* Re-apply stored volume/pan now that graph is wired */
+                applyVolume(slot.id, slot.volume);
+                applyPan(slot.id, slot.pan);
+            });
             videoEl.addEventListener('pause', () => refreshPlayPauseIcon(slot));
             videoEl.addEventListener('ended', () => refreshPlayPauseIcon(slot));
 
@@ -566,6 +620,68 @@
                     if (target >= 0) s.videoEl.currentTime = target;
                 }
             });
+        };
+
+        /* ── Volume / Pan helpers ── */
+        const fmtVolume = (v) => `${Math.round(v * 100)}%`;
+
+        const fmtPan = (p) => {
+            const v = Math.round(p * 100);
+            if (v === 0) return 'C';
+            return v < 0 ? `L${Math.abs(v)}` : `R${v}`;
+        };
+
+        const applyVolume = (slotId, rawValue) => {
+            const slot = slots.find((s) => s.id === slotId);
+            if (!slot) return;
+            const vol = Math.max(0, Math.min(1, Number(rawValue) || 0));
+            slot.volume = vol;
+            /* gainNode controls volume through the Web Audio graph; fall back to
+               video.volume when AudioContext is unavailable or not yet wired */
+            if (slot.gainNode) {
+                slot.gainNode.gain.value = vol;
+            } else if (slot.videoEl) {
+                slot.videoEl.volume = vol;
+            }
+            const label = document.getElementById(`vol-val-${slotId}`);
+            if (label) label.textContent = fmtVolume(vol);
+        };
+
+        const applyPan = (slotId, rawValue) => {
+            const slot = slots.find((s) => s.id === slotId);
+            if (!slot) return;
+            const pan = Math.max(-1, Math.min(1, Number(rawValue) || 0));
+            slot.pan = pan;
+            if (slot.pannerNode) {
+                slot.pannerNode.pan.value = pan;
+            }
+            const label = document.getElementById(`pan-val-${slotId}`);
+            if (label) label.textContent = fmtPan(pan);
+        };
+
+        /* Wire the Web Audio graph for a slot: video → gain → panner → destination.
+         * This is called after the video element exists and the user has interacted
+         * (so AudioContext can be created/resumed). Each video element can only be
+         * connected once, so we guard with audioSourceNode. */
+        const wireAudioGraph = (slot) => {
+            if (slot.audioSourceNode || !slot.videoEl) return;
+            const ctx = getAudioCtx();
+            if (!ctx) return;
+            try {
+                const source = ctx.createMediaElementSource(slot.videoEl);
+                const gain   = ctx.createGain();
+                const panner = ctx.createStereoPanner();
+                gain.gain.value   = slot.volume;
+                panner.pan.value  = slot.pan;
+                source.connect(gain);
+                gain.connect(panner);
+                panner.connect(ctx.destination);
+                slot.audioSourceNode = source;
+                slot.gainNode        = gain;
+                slot.pannerNode      = panner;
+            } catch (_e) {
+                /* Older browsers without StereoPannerNode — graceful fallback */
+            }
         };
 
         /* ── User offset change ── */
@@ -797,6 +913,18 @@
             if (!e.target.classList.contains('mp-offset-input')) return;
             const sid = e.target.dataset.slotId;
             applyUserOffset(sid, parseFloat(e.target.value) || 0);
+        });
+
+        /* Volume slider */
+        slotGrid.addEventListener('input', (e) => {
+            if (!e.target.classList.contains('mp-volume-slider')) return;
+            applyVolume(e.target.dataset.slotId, e.target.value);
+        });
+
+        /* Pan slider */
+        slotGrid.addEventListener('input', (e) => {
+            if (!e.target.classList.contains('mp-pan-slider')) return;
+            applyPan(e.target.dataset.slotId, e.target.value);
         });
 
         /* ── Toolbar buttons ── */
