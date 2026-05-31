@@ -281,19 +281,22 @@
         };
 
         /* ── Slot creation ── */
-        const createSlotObject = (recording) => ({
-            id: `slot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            recording,
-            startUtcMs: Number(recording.recording_start_utc_ms) || null,
-            userOffsetSecs: 0,
-            videoEl: null,
-            isAudioMuted: true,     /* muted by default; only primary plays audio */
-            volume: 1,
-            pan: 0,
-            audioSourceNode: null,  /* MediaElementAudioSourceNode */
-            pannerNode: null,       /* StereoPannerNode */
-            gainNode: null,         /* GainNode for per-slot volume */
-        });
+        const createSlotObject = (recording) => {
+            /* First slot defaults to 100% volume, every subsequent slot to 0% */
+            const isFirst = slots.length === 0;
+            return {
+                id: `slot-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                recording,
+                startUtcMs: Number(recording.recording_start_utc_ms) || null,
+                userOffsetSecs: 0,
+                videoEl: null,
+                volume: isFirst ? 1 : 0,
+                pan: 0,
+                audioSourceNode: null,  /* MediaElementAudioSourceNode */
+                pannerNode: null,       /* StereoPannerNode */
+                gainNode: null,         /* GainNode for per-slot volume */
+            };
+        };
 
         /* ── DOM slot builder ── */
         const buildSlotEl = (slot, index) => {
@@ -309,12 +312,6 @@
                     ${isLive ? '<span class="mp-slot-live-dot" title="Live" aria-label="Live"></span>' : ''}
                     <span class="mp-slot-label" title="${label}">${label}</span>
                     <div class="mp-slot-badges">
-                        <button type="button" class="mp-slot-ctrl-btn mp-slot-audio-btn" data-slot-id="${slot.id}"
-                            aria-label="Toggle audio for this slot" title="Toggle audio (only one slot plays audio at a time)">
-                            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
-                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-                            </svg>
-                        </button>
                         <button type="button" class="mp-slot-remove-btn" data-slot-id="${slot.id}"
                             aria-label="Remove this video">✕</button>
                     </div>
@@ -350,10 +347,10 @@
                             type="range"
                             class="mp-volume-slider"
                             data-slot-id="${slot.id}"
-                            min="0" max="1" step="0.02" value="1"
+                            min="0" max="1" step="0.02" value="${slot.volume}"
                             aria-label="Volume"
                         >
-                        <span class="mp-av-value mp-volume-value" id="vol-val-${slot.id}">100%</span>
+                        <span class="mp-av-value mp-volume-value" id="vol-val-${slot.id}">${fmtVolume(slot.volume)}</span>
                     </div>
                     <div class="mp-av-row">
                         <span class="mp-av-label">Pan</span>
@@ -404,15 +401,6 @@
                 stageEmpty.hidden = true;
                 syncBar.hidden = false;
             }
-
-            /* Mark audio-primary slot button */
-            slotGrid.querySelectorAll('.mp-slot-audio-btn').forEach((btn) => {
-                const sid = btn.dataset.slotId;
-                const idx = slots.findIndex((s) => s.id === sid);
-                const isPrimary = idx === primarySlotIndex;
-                btn.classList.toggle('is-audio-primary', isPrimary);
-                btn.title = isPrimary ? 'Audio: ON (click to mute)' : 'Audio: muted (click for audio)';
-            });
         };
 
         /* ── Add a recording to the stage ── */
@@ -430,20 +418,21 @@
 
             const slot = createSlotObject(recording);
 
-            /* If this is the first slot, it gets audio */
-            slot.isAudioMuted = slots.length > 0;
-
             slots.push(slot);
-            primarySlotIndex = 0; /* always keep slot 0 as primary */
 
             const slotEl = buildSlotEl(slot, slots.length - 1);
             slotGrid.appendChild(slotEl);
 
-            /* Wire video element */
+            /* Wire video element — never muted at the HTML level; volume
+               is controlled entirely through the gain node / videoEl.volume */
             const videoEl = slotEl.querySelector('.mp-slot-video');
             slot.videoEl = videoEl;
-            videoEl.muted = slot.isAudioMuted;
+            videoEl.muted = false;
+            videoEl.volume = slot.volume;
             videoEl.src = recording.media_url;
+
+            /* Set initial pan track fill (pan=0 → --pan-pct:50% → no fill) */
+            applyPan(slot.id, slot.pan);
 
             /* Hide loading overlay once loadedmetadata fires */
             const overlay = document.getElementById(`overlay-${slot.id}`);
@@ -497,6 +486,9 @@
             if (idx < 0) return;
 
             const slot = slots[idx];
+            if (slot.audioSourceNode) {
+                try { slot.audioSourceNode.disconnect(); } catch (_e) {}
+            }
             if (slot.videoEl) {
                 slot.videoEl.pause();
                 slot.videoEl.src = '';
@@ -507,7 +499,6 @@
 
             slots.splice(idx, 1);
 
-            /* Keep primarySlotIndex valid */
             if (primarySlotIndex >= slots.length) primarySlotIndex = Math.max(0, slots.length - 1);
 
             refreshStageLayout();
@@ -515,18 +506,6 @@
             updateSyncBarDuration();
 
             if (slots.length === 0) setSyncStatus('', '');
-        };
-
-        /* ── Audio routing: only one slot plays audio ── */
-        const setAudioPrimary = (slotId) => {
-            const idx = slots.findIndex((s) => s.id === slotId);
-            if (idx < 0) return;
-            primarySlotIndex = idx;
-            slots.forEach((s, i) => {
-                s.isAudioMuted = i !== idx;
-                if (s.videoEl) s.videoEl.muted = s.isAudioMuted;
-            });
-            refreshStageLayout();
         };
 
         /* ── Sync engine ── */
@@ -655,6 +634,9 @@
             if (slot.pannerNode) {
                 slot.pannerNode.pan.value = pan;
             }
+            /* Update track fill: map -1..+1 to 0%..100% for --pan-pct */
+            const slider = slotGrid.querySelector(`.mp-pan-slider[data-slot-id="${slotId}"]`);
+            if (slider) slider.style.setProperty('--pan-pct', `${(pan + 1) * 50}%`);
             const label = document.getElementById(`pan-val-${slotId}`);
             if (label) label.textContent = fmtPan(pan);
         };
@@ -862,10 +844,6 @@
             /* Remove button */
             const removeBtn = e.target.closest('.mp-slot-remove-btn');
             if (removeBtn) { removeSlot(removeBtn.dataset.slotId); return; }
-
-            /* Audio toggle */
-            const audioBtn = e.target.closest('.mp-slot-audio-btn');
-            if (audioBtn) { setAudioPrimary(audioBtn.dataset.slotId); return; }
 
             /* Per-slot play/pause */
             const playBtn = e.target.closest('.mp-slot-play-btn');

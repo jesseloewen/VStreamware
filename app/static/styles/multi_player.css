@@ -571,8 +571,7 @@
     min-width: 0;
 }
 
-.mp-volume-slider,
-.mp-pan-slider {
+.mp-volume-slider {
     width: 100%;
     min-width: 0;
     height: 14px;
@@ -580,9 +579,83 @@
     cursor: pointer;
 }
 
-/* Centre-tick visual hint on the pan slider */
+/* ── Pan slider: fill grows outward from centre, not from the left edge ── */
 .mp-pan-slider {
-    accent-color: #a78bfa;
+    --pan-pct: 50%;          /* updated by JS: 0%=full-left, 50%=centre, 100%=full-right */
+    --pan-fill:  #a78bfa;
+    --pan-track: #1e2a3a;
+    --pan-left:  min(var(--pan-pct), 50%);
+    --pan-right: max(var(--pan-pct), 50%);
+
+    width: 100%;
+    min-width: 0;
+    height: 14px;
+    cursor: pointer;
+
+    /* Reset browser default rendering so we can fully style the track */
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;   /* thumb bg handled separately */
+}
+
+/* Webkit track */
+.mp-pan-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(
+        to right,
+        var(--pan-track)  0%,
+        var(--pan-track)  var(--pan-left),
+        var(--pan-fill)   var(--pan-left),
+        var(--pan-fill)   var(--pan-right),
+        var(--pan-track)  var(--pan-right),
+        var(--pan-track)  100%
+    );
+}
+
+/* Firefox track */
+.mp-pan-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(
+        to right,
+        var(--pan-track)  0%,
+        var(--pan-track)  var(--pan-left),
+        var(--pan-fill)   var(--pan-left),
+        var(--pan-fill)   var(--pan-right),
+        var(--pan-track)  var(--pan-right),
+        var(--pan-track)  100%
+    );
+}
+
+/* Thumb – Webkit */
+.mp-pan-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #c4b5fd;
+    border: 1px solid #7c3aed;
+    margin-top: -4px;   /* vertically centre over the 4px track */
+    cursor: pointer;
+}
+
+/* Thumb – Firefox */
+.mp-pan-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #c4b5fd;
+    border: 1px solid #7c3aed;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.mp-pan-slider:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.45);
+    border-radius: 999px;
 }
 
 /* Offset control */
