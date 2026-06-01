@@ -1461,32 +1461,46 @@ body.is-mp-chat-resizing * {
 
     /* ── Video slot grid: single-column portrait layout ── */
     .mp-slot-grid {
+        /* Let the grid grow with its content on mobile */
         flex: none;
+        height: auto;
         overflow: visible;
         min-height: 0;
     }
 
+    /* Remove fixed fr rows — let slots size from their content */
     .mp-slot-grid[data-count="1"],
     .mp-slot-grid[data-count="2"],
     .mp-slot-grid[data-count="3"],
     .mp-slot-grid[data-count="4"] {
         grid-template-columns: 1fr;
-        grid-template-rows: none;
+        grid-template-rows: auto;
     }
 
     .mp-slot-grid[data-count="3"] .mp-slot:first-child {
         grid-column: 1;
     }
 
-    /* Slots: natural height driven by 16:9 video aspect ratio */
+    /* Slots: height comes from the video aspect ratio */
     .mp-slot {
         min-height: 0;
+        height: auto;
     }
 
+    /* Video wrap drives the slot height via aspect-ratio */
     .mp-slot-video-wrap {
         aspect-ratio: 16 / 9;
+        width: 100%;
         flex: none;
-        max-height: 56vw;
+        height: auto;
+        max-height: none;
+    }
+
+    /* Video fills the aspect-ratio box naturally */
+    .mp-slot-video {
+        width: 100%;
+        height: 100%;
+        max-height: none;
     }
 
     /* Per-slot sidebar: stack below video on mobile */
@@ -1530,10 +1544,6 @@ body.is-mp-chat-resizing * {
 
     .mp-slot-grid[data-count="3"] .mp-slot:first-child {
         grid-column: 1 / -1;
-    }
-
-    .mp-slot-video-wrap {
-        max-height: 40vw;
     }
 
     .mp-chat-panel {
