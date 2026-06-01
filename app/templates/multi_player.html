@@ -19,6 +19,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/multi_player.css') }}">
 </head>
 <body class="browser-page mp-root-body" data-transcode-status-url="{{ url_for('dashboard.transcode_queue_status') }}">
+    <!-- Shared panel overlay backdrop (mobile) -->
+    <div class="panel-overlay" id="mp-panel-overlay" aria-hidden="true"></div>
     <main class="container mp-main">
         <!-- ── Page header ── -->
         <header class="page-header browser-header">
@@ -95,6 +97,8 @@
                     <div class="mp-picker-header">
                         <div class="mp-picker-header-title-row">
                             <h3>Pick Recordings</h3>
+                            <button type="button" class="mp-panel-close-btn" id="mp-picker-close"
+                                aria-label="Close recordings picker">✕</button>
                         </div>
                         <div class="mp-picker-filters">
                             <select id="mp-filter-channel" aria-label="Filter by channel">
@@ -172,7 +176,11 @@
 
                         <!-- Chat panel header -->
                         <header class="panel-title mp-chat-header">
-                            <h3 class="mp-chat-header-title">Chat</h3>
+                            <div class="mp-chat-header-title-row">
+                                <h3 class="mp-chat-header-title">Chat</h3>
+                                <button type="button" class="mp-panel-close-btn mp-chat-close-btn" id="mp-chat-close"
+                                    aria-label="Close chat panel">✕</button>
+                            </div>
                             <div class="mp-chat-header-controls">
 
                                 <!-- Display mode: merged / columns -->
@@ -283,6 +291,9 @@
         const btnSeekBack       = document.getElementById('mp-seek-back');
         const btnSeekFwd        = document.getElementById('mp-seek-forward');
         const pickerToggle   = document.getElementById('mp-picker-toggle');
+        const mpPanelOverlay = document.getElementById('mp-panel-overlay');
+        const pickerCloseBtn = document.getElementById('mp-picker-close');
+        const chatCloseBtn   = document.getElementById('mp-chat-close');
 
         /* ── Chat panel state ── */
         const CHAT_PANEL_KEY       = 'vstreamware.mp-chat-open';
@@ -323,30 +334,110 @@
             return chatSlotColors[key];
         };
 
+        /* ── Mobile detection ── */
+        const MP_MOBILE_BREAKPOINT = 980;
+        const isMobileViewport = () => window.innerWidth <= MP_MOBILE_BREAKPOINT;
+
+        /* ── Overlay backdrop ── */
+        const MP_OVERLAY_PICKER = 'picker';
+        const MP_OVERLAY_CHAT   = 'chat';
+        let mpOverlayOwner = null; /* which panel currently owns the overlay */
+
+        const showMpOverlay = (owner) => {
+            mpOverlayOwner = owner;
+            if (mpPanelOverlay) {
+                mpPanelOverlay.classList.add('is-visible');
+                mpPanelOverlay.setAttribute('aria-hidden', 'false');
+            }
+            document.body.classList.add('panel-open');
+        };
+
+        const hideMpOverlay = () => {
+            mpOverlayOwner = null;
+            if (mpPanelOverlay) {
+                mpPanelOverlay.classList.remove('is-visible');
+                mpPanelOverlay.setAttribute('aria-hidden', 'true');
+            }
+            document.body.classList.remove('panel-open');
+        };
+
+        /* Called when backdrop is clicked or Escape is pressed */
+        const closeMobilePanel = (which) => {
+            if (which === MP_OVERLAY_PICKER || !which) {
+                if (isMobileViewport()) {
+                    /* Mobile: remove is-open class instead of collapsing */
+                    const pickerPanel = document.getElementById('mp-picker-panel');
+                    if (pickerPanel) pickerPanel.classList.remove('is-open');
+                    if (mpOverlayOwner === MP_OVERLAY_PICKER) hideMpOverlay();
+                    updatePickerToggleState();
+                    return;
+                }
+            }
+            if (which === MP_OVERLAY_CHAT || !which) {
+                if (isMobileViewport() && isChatOpen()) {
+                    /* Mobile: close the chat panel overlay */
+                    setChatOpen(false, true);
+                    return;
+                }
+            }
+        };
+
+        if (mpPanelOverlay) {
+            mpPanelOverlay.addEventListener('click', () => {
+                if (mpOverlayOwner) closeMobilePanel(mpOverlayOwner);
+                else { closeMobilePanel(MP_OVERLAY_PICKER); closeMobilePanel(MP_OVERLAY_CHAT); }
+            });
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (!isMobileViewport()) return;
+            if (mpOverlayOwner) { closeMobilePanel(mpOverlayOwner); e.preventDefault(); }
+        });
+
         /* ── Picker collapse (mirrors saved-panel toggle pattern) ── */
         const PICKER_COLLAPSE_KEY  = 'vstreamware.mp-picker-collapsed';
         const PICKER_COLLAPSE_CLASS = 'mp-picker-collapsed';
 
         const mpPage = document.querySelector('.multi-player-page');
+        const pickerPanel = document.getElementById('mp-picker-panel');
 
         const updatePickerToggleState = () => {
             if (!pickerToggle || !mpPage) return;
-            const collapsed = mpPage.classList.contains(PICKER_COLLAPSE_CLASS);
-            pickerToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-            pickerToggle.classList.toggle('is-active', !collapsed);
+            const mobile = isMobileViewport();
+            const isOpen = mobile
+                ? (pickerPanel && pickerPanel.classList.contains('is-open'))
+                : !mpPage.classList.contains(PICKER_COLLAPSE_CLASS);
+            pickerToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            pickerToggle.classList.toggle('is-active', Boolean(isOpen));
             const labelEl = pickerToggle.querySelector('.panel-toggle-text');
             if (labelEl) {
-                const nextText = collapsed
-                    ? (labelEl.getAttribute('data-collapsed-label') || 'Show Picker')
-                    : (labelEl.getAttribute('data-expanded-label')  || 'Hide Picker');
+                const nextText = isOpen
+                    ? (labelEl.getAttribute('data-expanded-label') || 'Hide Picker')
+                    : (labelEl.getAttribute('data-collapsed-label') || 'Show Picker');
                 labelEl.textContent = nextText;
             }
             pickerToggle.setAttribute('aria-label',
-                collapsed ? 'Show recordings picker' : 'Hide recordings picker');
+                isOpen ? 'Hide recordings picker' : 'Show recordings picker');
         };
 
         const setPickerCollapsed = (collapsed, persist = false) => {
             if (!mpPage) return;
+            if (isMobileViewport()) {
+                /* Mobile: open/close as fixed overlay, ignore collapse state */
+                const wantOpen = !collapsed;
+                if (pickerPanel) pickerPanel.classList.toggle('is-open', wantOpen);
+                if (wantOpen) {
+                    /* Close chat overlay first */
+                    if (isChatOpen()) setChatOpen(false, true);
+                    showMpOverlay(MP_OVERLAY_PICKER);
+                } else {
+                    if (mpOverlayOwner === MP_OVERLAY_PICKER) hideMpOverlay();
+                }
+                updatePickerToggleState();
+                return;
+            }
+            /* Desktop */
             mpPage.classList.toggle(PICKER_COLLAPSE_CLASS, Boolean(collapsed));
             updatePickerToggleState();
             if (persist) {
@@ -360,15 +451,25 @@
             try {
                 const raw = window.localStorage.getItem(PICKER_COLLAPSE_KEY);
                 const wasCollapsed = raw === '1' || raw === 'true';
-                setPickerCollapsed(wasCollapsed, false);
-            } catch (_e) {}
+                if (!isMobileViewport()) setPickerCollapsed(wasCollapsed, false);
+                else updatePickerToggleState(); /* mobile: start closed */
+            } catch (_e) { updatePickerToggleState(); }
         })();
 
         if (pickerToggle) {
             pickerToggle.addEventListener('click', () => {
-                const nowCollapsed = !mpPage.classList.contains(PICKER_COLLAPSE_CLASS);
-                setPickerCollapsed(nowCollapsed, true);
+                if (isMobileViewport()) {
+                    const isCurrentlyOpen = pickerPanel && pickerPanel.classList.contains('is-open');
+                    setPickerCollapsed(isCurrentlyOpen, false); /* toggle: collapsed = !open */
+                } else {
+                    const nowCollapsed = !mpPage.classList.contains(PICKER_COLLAPSE_CLASS);
+                    setPickerCollapsed(nowCollapsed, true);
+                }
             });
+        }
+
+        if (pickerCloseBtn) {
+            pickerCloseBtn.addEventListener('click', () => setPickerCollapsed(true, false));
         }
 
         /* ── Helpers ── */
@@ -1099,6 +1200,18 @@
         const setChatOpen = (open, persist = true) => {
             if (!stageChatWrap) return;
             stageChatWrap.classList.toggle(MP_CHAT_OPEN_CLASS, Boolean(open));
+            if (isMobileViewport()) {
+                /* Mobile: show/hide as a fixed overlay from the right */
+                if (open) {
+                    /* Close picker overlay first */
+                    if (pickerPanel && pickerPanel.classList.contains('is-open')) {
+                        pickerPanel.classList.remove('is-open');
+                    }
+                    showMpOverlay(MP_OVERLAY_CHAT);
+                } else {
+                    if (mpOverlayOwner === MP_OVERLAY_CHAT) hideMpOverlay();
+                }
+            }
             updateChatToggleState();
             if (open) {
                 applyChatWidth(readPersistedChatWidth(), false);
@@ -1116,6 +1229,10 @@
 
         if (chatToggleBtn) {
             chatToggleBtn.addEventListener('click', () => setChatOpen(!isChatOpen(), true));
+        }
+
+        if (chatCloseBtn) {
+            chatCloseBtn.addEventListener('click', () => setChatOpen(false, true));
         }
 
         /* ── Chat resize handle (pointer drag) ── */
@@ -1734,6 +1851,36 @@
         filterChannel.addEventListener('change', () => { populateDayFilter(); renderPickerList(); });
         filterDay.addEventListener('change', renderPickerList);
         filterSearch.addEventListener('input', renderPickerList);
+
+        /* ── Viewport resize: normalise panel states when crossing breakpoint ── */
+        let mpLastWasMobile = isMobileViewport();
+        window.addEventListener('resize', () => {
+            const nowMobile = isMobileViewport();
+            if (nowMobile === mpLastWasMobile) return;
+            mpLastWasMobile = nowMobile;
+            if (!nowMobile) {
+                /* Switched to desktop: close any mobile overlay, restore desktop state */
+                if (pickerPanel) pickerPanel.classList.remove('is-open');
+                hideMpOverlay();
+                updatePickerToggleState();
+                /* Restore desktop picker collapse state */
+                try {
+                    const raw = window.localStorage.getItem(PICKER_COLLAPSE_KEY);
+                    const wasCollapsed = raw === '1' || raw === 'true';
+                    mpPage.classList.toggle(PICKER_COLLAPSE_CLASS, wasCollapsed);
+                    updatePickerToggleState();
+                } catch (_e) {}
+                /* Chat panel: apply persisted open state on desktop */
+                try {
+                    const raw = window.localStorage.getItem(CHAT_PANEL_KEY);
+                    if (raw !== '1' && raw !== 'true') setChatOpen(false, false);
+                } catch (_e) {}
+            } else {
+                /* Switched to mobile: ensure desktop layout classes are removed */
+                updatePickerToggleState();
+                updateChatToggleState();
+            }
+        }, { passive: true });
 
         /* ── Visibility / cleanup ── */
         document.addEventListener('visibilitychange', () => {
