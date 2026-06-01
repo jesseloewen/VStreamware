@@ -1339,7 +1339,8 @@ body.is-mp-chat-resizing * {
 
     .mp-root-body {
         height: auto !important;
-        overflow: auto !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
     }
 
     .mp-root-body .mp-main {
@@ -1360,7 +1361,9 @@ body.is-mp-chat-resizing * {
     .mp-body {
         display: block !important;
         height: auto !important;
-        overflow: visible !important;
+        overflow: hidden !important;
+        width: 100%;
+        box-sizing: border-box;
         border-radius: 0 0 10px 10px;
     }
 
@@ -1368,14 +1371,18 @@ body.is-mp-chat-resizing * {
     .mp-stage-chat-wrap {
         display: block !important;
         height: auto !important;
-        overflow: visible !important;
+        overflow: hidden !important;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     /* ── Stage: block, auto height ── */
     .mp-stage {
         display: block !important;
         height: auto !important;
-        overflow: visible !important;
+        overflow: hidden !important;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     /* Sync bar stays flex but wraps */
@@ -1391,11 +1398,13 @@ body.is-mp-chat-resizing * {
         order: 10;
     }
 
-    /* ── Slot grid: block so it sizes from content ── */
+    /* ── Slot grid: full-width, content-height grid ── */
     .mp-slot-grid {
         display: grid !important;
         height: auto !important;
-        overflow: visible !important;
+        overflow: hidden !important;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     /* Single column, auto rows so content drives height */
@@ -1415,16 +1424,35 @@ body.is-mp-chat-resizing * {
     .mp-slot {
         display: block !important;
         height: auto !important;
-        overflow: visible !important;
+        overflow: hidden !important; /* clip controls that would bleed out */
+        width: 100%;
+        box-sizing: border-box;
     }
 
-    /* Header and controls are block children, they stack naturally */
-    .mp-slot-header {
-        display: flex; /* keep flex for its own internal layout */
-    }
-
+    /* Header and controls fill the slot width */
+    .mp-slot-header,
     .mp-slot-controls {
-        display: flex; /* keep flex for its own internal layout */
+        display: flex;
+        width: 100%;
+        box-sizing: border-box;
+        min-width: 0;
+    }
+
+    /* Ensure flex children inside controls don't cause overflow */
+    .mp-slot-av-controls {
+        min-width: 0;
+        flex: 1 1 0;
+    }
+
+    .mp-offset-group {
+        min-width: 0;
+        flex-shrink: 1;
+    }
+
+    .mp-volume-slider,
+    .mp-pan-slider {
+        min-width: 0;
+        width: 100%;
     }
 
     /* Video wrap: 16:9 aspect ratio box */
