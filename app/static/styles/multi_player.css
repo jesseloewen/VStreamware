@@ -1351,10 +1351,10 @@ body.is-mp-chat-resizing * {
     max-height: 0;
 }
 
-/* When header is collapsed, restore the top border + corners on .mp-body */
+/* When header is collapsed the show-btn strip acts as the separator;
+   restore rounded top corners on the body below it */
 .mp-header-collapsed .mp-body {
-    border-top: 1px solid var(--panel-border);
-    border-radius: 10px 10px 10px 10px;
+    border-radius: 0 0 10px 10px;
 }
 
 /* Collapse toggle button — sits inside the toolbar at the far right */
@@ -1392,48 +1392,53 @@ body.is-mp-chat-resizing * {
     box-shadow: 0 0 0 2px rgba(110, 166, 220, 0.38);
 }
 
-/* Rotate chevron when header is collapsed */
+/* Rotate chevron-down → chevron-up when header is collapsed */
 .mp-header-collapsed .mp-header-collapse-btn svg {
     transform: rotate(180deg);
 }
 
-/* Floating restore button — shown in top-left corner when header is hidden */
+/* Ensure the button's hidden attribute is respected but display:flex when shown */
+.mp-header-show-btn[hidden] {
+    display: none !important;
+}
+
+/* Floating restore strip — full-width, centred, paper-thin */
 .mp-header-show-btn {
-    position: absolute;
-    top: 6px;
-    left: 6px;
-    z-index: 20;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border-radius: 8px;
-    border: 1px solid #3d5a7a;
-    background: rgba(20, 30, 48, 0.88);
-    color: #93c5fd;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
+    width: 100%;
+    height: 14px;
+    padding: 0;
+    border: none;
+    border-bottom: 1px solid var(--panel-border);
+    background: #1e1e1e;
+    color: var(--muted);
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
-    transition: background 0.14s ease, border-color 0.14s ease;
-    backdrop-filter: blur(4px);
+    transition: background 0.14s ease, color 0.14s ease;
+    /* not positioned absolute — sits in normal flow between header-wrap and body */
 }
 
 .mp-header-show-btn svg {
-    width: 15px;
-    height: 15px;
+    width: 12px;
+    height: 12px;
     display: block;
+    opacity: 0.6;
+    transition: opacity 0.14s ease;
 }
 
 .mp-header-show-btn:hover {
-    background: rgba(30, 50, 72, 0.95);
-    border-color: #6ea6dc;
-    color: #bfdbfe;
+    background: #252525;
+    color: var(--text);
+}
+
+.mp-header-show-btn:hover svg {
+    opacity: 1;
 }
 
 .mp-header-show-btn:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px rgba(110, 166, 220, 0.38);
+    box-shadow: inset 0 0 0 2px rgba(110, 166, 220, 0.38);
 }
 
 /* ── Picker collapse (desktop only) ─────────────────────────────────────────── */
