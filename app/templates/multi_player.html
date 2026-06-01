@@ -67,6 +67,24 @@
                     <button type="button" id="mp-clear-all" class="danger" aria-label="Remove all videos from the player">Clear All</button>
                 </div>
                 <span class="mp-sync-status" id="mp-sync-status" aria-live="polite"></span>
+                <!-- Chat panel toggle (right side of toolbar) -->
+                <button
+                    type="button"
+                    class="panel-hamburger mp-chat-toggle"
+                    id="mp-chat-toggle"
+                    aria-controls="mp-chat-panel"
+                    aria-expanded="false"
+                    aria-label="Show chat panel"
+                >
+                    <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-5 4v-4H4A1.5 1.5 0 0 1 2.5 16V7A1.5 1.5 0 0 1 4 5.5Z"/>
+                        <path d="M7.5 10.5h9"/>
+                        <path d="M7.5 13.5h6"/>
+                    </svg>
+                    <span class="panel-toggle-text"
+                        data-expanded-label="Hide Chat"
+                        data-collapsed-label="Show Chat">Show Chat</span>
+                </button>
             </div>
 
             <!-- Body: picker + stage -->
@@ -95,7 +113,10 @@
                     </div>
                 </aside>
 
-                <!-- ── Right: video stage ── -->
+                <!-- ── Right: video stage + chat panel ── -->
+                <div class="mp-stage-chat-wrap">
+
+                <!-- Video stage -->
                 <section class="mp-stage" aria-label="Video stage">
 
                     <!-- Global sync bar -->
@@ -138,6 +159,74 @@
                     <div class="mp-slot-grid" id="mp-slot-grid" data-count="0" hidden></div>
 
                 </section>
+
+                <!-- Resize handle between stage and chat panel -->
+                <div class="mp-chat-resize-handle" id="mp-chat-resize-handle"
+                    role="separator" aria-orientation="vertical"
+                    aria-label="Resize chat panel"
+                    hidden></div>
+
+                <!-- ── Global Chat Panel ── -->
+                <aside class="mp-chat-panel" id="mp-chat-panel" aria-label="Multi-player chat" hidden>
+                    <section class="panel-shell">
+
+                        <!-- Chat panel header -->
+                        <header class="panel-title mp-chat-header">
+                            <h3 class="mp-chat-header-title">Chat</h3>
+                            <div class="mp-chat-header-controls">
+
+                                <!-- Display mode: merged / columns -->
+                                <div class="mp-chat-mode-group" role="group" aria-label="Chat display mode">
+                                    <button type="button" class="mp-chat-mode-btn is-active" data-chat-mode="merged"
+                                        aria-pressed="true" aria-label="Merged chat thread">Merged</button>
+                                    <button type="button" class="mp-chat-mode-btn" data-chat-mode="columns"
+                                        aria-pressed="false" aria-label="Chat in separate columns">Columns</button>
+                                </div>
+
+                                <!-- Per-slot sidebar toggle -->
+                                <button type="button" class="mp-chat-sidebar-toggle-btn" id="mp-chat-sidebar-toggle"
+                                    aria-pressed="false" aria-label="Show per-slot chat sidebars">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <rect width="18" height="18" x="3" y="3" rx="2"/>
+                                        <path d="M15 3v18"/>
+                                    </svg>
+                                    <span>Per-Slot</span>
+                                </button>
+
+                            </div>
+                        </header>
+
+                        <!-- Channel selector -->
+                        <div class="mp-chat-channel-selector" id="mp-chat-channel-selector">
+                            <p class="mp-chat-channel-selector-label">Channels</p>
+                            <div class="mp-chat-channel-list" id="mp-chat-channel-list">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <!-- Chat body -->
+                        <div class="panel-body mp-chat-body">
+                            <p class="mp-chat-status muted" id="mp-chat-status">Add videos to start chat replay.</p>
+
+                            <!-- Merged view -->
+                            <div class="mp-chat-merged" id="mp-chat-merged">
+                                <div class="mp-chat-list" id="mp-chat-merged-list"
+                                    role="log" aria-label="Merged chat messages" aria-live="polite"></div>
+                            </div>
+
+                            <!-- Columns view -->
+                            <div class="mp-chat-columns" id="mp-chat-columns" hidden></div>
+
+                            <!-- Jump to latest -->
+                            <button type="button" class="button-link chat-jump-latest mp-chat-jump"
+                                id="mp-chat-jump" hidden>Jump To Latest</button>
+                        </div>
+
+                    </section>
+                </aside>
+
+                </div><!-- /.mp-stage-chat-wrap -->
             </div>
         </div>
     </main>
@@ -177,12 +266,62 @@
         const syncDurationEl = document.getElementById('mp-sync-duration');
         const syncSeek       = document.getElementById('mp-sync-seek');
         const syncStatusEl      = document.getElementById('mp-sync-status');
+        const chatToggleBtn      = document.getElementById('mp-chat-toggle');
+        const chatPanel          = document.getElementById('mp-chat-panel');
+        const chatResizeHandle   = document.getElementById('mp-chat-resize-handle');
+        const chatStatusEl       = document.getElementById('mp-chat-status');
+        const chatMergedList     = document.getElementById('mp-chat-merged-list');
+        const chatColumnsEl      = document.getElementById('mp-chat-columns');
+        const chatMergedEl       = document.getElementById('mp-chat-merged');
+        const chatJumpBtn        = document.getElementById('mp-chat-jump');
+        const chatChannelList    = document.getElementById('mp-chat-channel-list');
+        const chatSidebarToggle  = document.getElementById('mp-chat-sidebar-toggle');
+        const stageChatWrap      = document.querySelector('.mp-stage-chat-wrap');
         const btnPlayPauseAll   = document.getElementById('mp-play-pause-all');
         const btnSyncNow        = document.getElementById('mp-sync-now');
         const btnClearAll       = document.getElementById('mp-clear-all');
         const btnSeekBack       = document.getElementById('mp-seek-back');
         const btnSeekFwd        = document.getElementById('mp-seek-forward');
         const pickerToggle   = document.getElementById('mp-picker-toggle');
+
+        /* ── Chat panel state ── */
+        const CHAT_PANEL_KEY       = 'vstreamware.mp-chat-open';
+        const CHAT_WIDTH_KEY       = 'vstreamware.mp-chat-width';
+        const CHAT_MODE_KEY        = 'vstreamware.mp-chat-mode';
+        const CHAT_SIDEBAR_KEY     = 'vstreamware.mp-chat-sidebar';
+        const CHAT_CHANNELS_KEY    = 'vstreamware.mp-chat-channels';
+        const MP_CHAT_OPEN_CLASS   = 'mp-chat-open';
+        const MP_SIDEBAR_CLASS     = 'mp-chat-sidebar-mode';
+        const CHAT_MIN_WIDTH_PX    = 240;
+        const CHAT_MAX_RATIO       = 0.48;
+        const CHAT_DEFAULT_RATIO   = 0.28;
+        const CHAT_POLL_MS         = 2500;   /* how often to fetch new chat */
+        const CHAT_WINDOW_MS       = 120000; /* 2-min window around current position */
+
+        let chatMode              = 'merged'; /* 'merged' | 'columns' */
+        let chatSidebarMode       = false;    /* per-slot sidebars */
+        let chatEnabledChannels   = new Set(); /* which channels to show chat for */
+        let chatData              = {};  /* channelKey → { messages: [], latestUtcMs } */
+        let chatPollTimer         = null;
+        let chatAutoFollow        = true;
+        let chatResizeActive      = false;
+        let chatResizePointerId   = null;
+        let chatSlotColors        = {}; /* channelKey → hsl color string */
+
+        const CHANNEL_COLORS = [
+            '#60a5fa', '#34d399', '#fb923c', '#f472b6',
+            '#a78bfa', '#2dd4bf', '#fbbf24', '#f87171',
+        ];
+        let colorIdx = 0;
+
+        const getChannelColor = (channel) => {
+            const key = String(channel || '').toLowerCase();
+            if (!chatSlotColors[key]) {
+                chatSlotColors[key] = CHANNEL_COLORS[colorIdx % CHANNEL_COLORS.length];
+                colorIdx++;
+            }
+            return chatSlotColors[key];
+        };
 
         /* ── Picker collapse (mirrors saved-panel toggle pattern) ── */
         const PICKER_COLLAPSE_KEY  = 'vstreamware.mp-picker-collapsed';
@@ -557,6 +696,7 @@
             renderPickerList(); /* re-render to update "add" button states + overlap filter */
             updateSyncBarDuration();
             setSyncStatus(`Added "${recording.display_title || recording.channel}".`, 'synced');
+            onSlotsChanged();
         };
 
         const refreshPlayPauseIcon = (slot) => {
@@ -598,6 +738,7 @@
             updateSyncBarDuration();
 
             if (slots.length === 0) setSyncStatus('', '');
+            onSlotsChanged();
             /* renderPickerList() above already re-applies the overlap filter;
                when slots is now empty, getActiveWindowMs() returns null and
                all recordings become available again automatically */
@@ -906,6 +1047,537 @@
             pickerList.appendChild(fragment);
         };
 
+        /* ────────────────────────────────────────────────────────────
+         * CHAT ENGINE
+         * ──────────────────────────────────────────────────────────── */
+
+        /* ── Chat panel open/close ── */
+        const isChatOpen = () => Boolean(stageChatWrap && stageChatWrap.classList.contains(MP_CHAT_OPEN_CLASS));
+
+        const clampChatWidth = (rawWidth) => {
+            const vw = Math.max(window.innerWidth || 0, 640);
+            const max = Math.max(CHAT_MIN_WIDTH_PX + 40, Math.floor(vw * CHAT_MAX_RATIO));
+            const fallback = Math.round(vw * CHAT_DEFAULT_RATIO);
+            const parsed = Number.parseInt(String(rawWidth), 10);
+            const candidate = Number.isFinite(parsed) ? parsed : fallback;
+            return Math.max(CHAT_MIN_WIDTH_PX, Math.min(max, candidate));
+        };
+
+        const readPersistedChatWidth = () => {
+            try {
+                const raw = window.localStorage.getItem(CHAT_WIDTH_KEY);
+                return raw ? clampChatWidth(raw) : clampChatWidth(null);
+            } catch (_e) { return clampChatWidth(null); }
+        };
+
+        const applyChatWidth = (rawWidth, persist = true) => {
+            if (!stageChatWrap) return;
+            const w = clampChatWidth(rawWidth);
+            stageChatWrap.style.setProperty('--mp-chat-width', `${w}px`);
+            if (chatResizeHandle) chatResizeHandle.setAttribute('aria-valuenow', String(w));
+            if (persist) {
+                try { window.localStorage.setItem(CHAT_WIDTH_KEY, String(w)); } catch (_e) {}
+            }
+        };
+
+        const updateChatToggleState = () => {
+            if (!chatToggleBtn) return;
+            const open = isChatOpen();
+            chatToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            chatToggleBtn.classList.toggle('is-active', open);
+            const labelEl = chatToggleBtn.querySelector('.panel-toggle-text');
+            if (labelEl) {
+                labelEl.textContent = open
+                    ? (labelEl.getAttribute('data-expanded-label') || 'Hide Chat')
+                    : (labelEl.getAttribute('data-collapsed-label') || 'Show Chat');
+            }
+            chatToggleBtn.setAttribute('aria-label', open ? 'Hide chat panel' : 'Show chat panel');
+            if (chatResizeHandle) chatResizeHandle.hidden = !open;
+            if (chatPanel) chatPanel.hidden = !open;
+        };
+
+        const setChatOpen = (open, persist = true) => {
+            if (!stageChatWrap) return;
+            stageChatWrap.classList.toggle(MP_CHAT_OPEN_CLASS, Boolean(open));
+            updateChatToggleState();
+            if (open) {
+                applyChatWidth(readPersistedChatWidth(), false);
+                scheduleChatPoll();
+            } else {
+                stopChatPoll();
+            }
+            if (persist) {
+                try { window.localStorage.setItem(CHAT_PANEL_KEY, open ? '1' : '0'); } catch (_e) {}
+            }
+        };
+
+        /* Restore persisted chat open state — deferred to boot (after all functions defined) */
+        /* [see boot section] */
+
+        if (chatToggleBtn) {
+            chatToggleBtn.addEventListener('click', () => setChatOpen(!isChatOpen(), true));
+        }
+
+        /* ── Chat resize handle (pointer drag) ── */
+        if (chatResizeHandle) {
+            chatResizeHandle.setAttribute('aria-valuemin', String(CHAT_MIN_WIDTH_PX));
+
+            chatResizeHandle.addEventListener('pointerdown', (e) => {
+                if (chatResizeActive) return;
+                chatResizeActive = true;
+                chatResizePointerId = e.pointerId;
+                chatResizeHandle.setPointerCapture(e.pointerId);
+                document.body.classList.add('is-mp-chat-resizing');
+            });
+
+            chatResizeHandle.addEventListener('pointermove', (e) => {
+                if (!chatResizeActive || e.pointerId !== chatResizePointerId) return;
+                if (!stageChatWrap) return;
+                const bounds = stageChatWrap.getBoundingClientRect();
+                if (bounds.width <= 0) return;
+                const newWidth = Math.round(bounds.right - e.clientX);
+                applyChatWidth(newWidth, false);
+            });
+
+            const stopChatResize = () => {
+                if (!chatResizeActive) return;
+                chatResizeActive = false;
+                chatResizePointerId = null;
+                document.body.classList.remove('is-mp-chat-resizing');
+                /* persist final width */
+                if (stageChatWrap) {
+                    const cur = getComputedStyle(stageChatWrap).getPropertyValue('--mp-chat-width').trim();
+                    applyChatWidth(cur, true);
+                }
+            };
+
+            chatResizeHandle.addEventListener('pointerup', stopChatResize);
+            chatResizeHandle.addEventListener('pointercancel', stopChatResize);
+
+            /* Keyboard: arrow keys adjust width */
+            chatResizeHandle.addEventListener('keydown', (e) => {
+                const step = e.shiftKey ? 40 : 10;
+                if (!stageChatWrap) return;
+                const cur = getComputedStyle(stageChatWrap).getPropertyValue('--mp-chat-width').trim();
+                const cur_w = clampChatWidth(cur);
+                if (e.key === 'ArrowLeft')  { e.preventDefault(); applyChatWidth(cur_w + step, true); }
+                if (e.key === 'ArrowRight') { e.preventDefault(); applyChatWidth(cur_w - step, true); }
+            });
+        }
+
+        /* ── Chat mode (merged / columns) ── */
+        const setChatMode = (mode, persist = true) => {
+            chatMode = (mode === 'columns') ? 'columns' : 'merged';
+            if (chatMergedEl)  chatMergedEl.hidden  = (chatMode !== 'merged');
+            if (chatColumnsEl) chatColumnsEl.hidden = (chatMode !== 'columns');
+            /* Update mode buttons */
+            document.querySelectorAll('.mp-chat-mode-btn').forEach((btn) => {
+                const m = btn.getAttribute('data-chat-mode');
+                const active = m === chatMode;
+                btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+                btn.classList.toggle('is-active', active);
+            });
+            if (persist) {
+                try { window.localStorage.setItem(CHAT_MODE_KEY, chatMode); } catch (_e) {}
+            }
+            renderChatMessages();
+        };
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('.mp-chat-mode-btn');
+            if (!btn) return;
+            setChatMode(btn.getAttribute('data-chat-mode'));
+        });
+
+        /* Restore persisted mode */
+        (() => {
+            try {
+                const raw = window.localStorage.getItem(CHAT_MODE_KEY);
+                if (raw === 'columns' || raw === 'merged') chatMode = raw;
+            } catch (_e) {}
+        })();
+
+        /* ── Per-slot sidebar mode ── */
+        const isSidebarMode = () => chatSidebarMode;
+
+        const setSidebarMode = (enabled, persist = true) => {
+            chatSidebarMode = Boolean(enabled);
+            const mpPage = document.querySelector('.multi-player-page');
+            if (mpPage) mpPage.classList.toggle(MP_SIDEBAR_CLASS, chatSidebarMode);
+            if (chatSidebarToggle) {
+                chatSidebarToggle.setAttribute('aria-pressed', chatSidebarMode ? 'true' : 'false');
+                chatSidebarToggle.classList.toggle('is-active', chatSidebarMode);
+            }
+            /* Rebuild slot sidebars */
+            rebuildSlotSidebars();
+            if (persist) {
+                try { window.localStorage.setItem(CHAT_SIDEBAR_KEY, chatSidebarMode ? '1' : '0'); } catch (_e) {}
+            }
+        };
+
+        if (chatSidebarToggle) {
+            chatSidebarToggle.addEventListener('click', () => setSidebarMode(!chatSidebarMode));
+        }
+
+        /* Restore persisted sidebar state */
+        (() => {
+            try {
+                const raw = window.localStorage.getItem(CHAT_SIDEBAR_KEY);
+                if (raw === '1' || raw === 'true') chatSidebarMode = true;
+            } catch (_e) {}
+        })();
+
+        /* ── Channel selector ── */
+        const readPersistedEnabledChannels = () => {
+            try {
+                const raw = window.localStorage.getItem(CHAT_CHANNELS_KEY);
+                if (!raw) return null;
+                const arr = JSON.parse(raw);
+                if (Array.isArray(arr)) return new Set(arr.map(String));
+                return null;
+            } catch (_e) { return null; }
+        };
+
+        const persistEnabledChannels = () => {
+            try {
+                window.localStorage.setItem(CHAT_CHANNELS_KEY,
+                    JSON.stringify(Array.from(chatEnabledChannels)));
+            } catch (_e) {}
+        };
+
+        const renderChannelSelector = () => {
+            if (!chatChannelList) return;
+            /* Collect channels currently in slots */
+            const channels = [...new Set(slots.map((s) => s.recording.channel).filter(Boolean))];
+
+            if (channels.length === 0) {
+                chatChannelList.innerHTML = '<span class="mp-chat-no-channels">No videos loaded.</span>';
+                return;
+            }
+
+            /* Enable all by default for new channels */
+            channels.forEach((ch) => {
+                if (!chatEnabledChannels.has(ch)) chatEnabledChannels.add(ch);
+            });
+
+            chatChannelList.innerHTML = '';
+            channels.forEach((ch) => {
+                const color = getChannelColor(ch);
+                const checked = chatEnabledChannels.has(ch) ? 'checked' : '';
+                const label = document.createElement('label');
+                label.className = 'mp-chat-channel-check';
+                label.innerHTML = `
+                    <input type="checkbox" class="mp-chat-ch-checkbox" data-channel="${escHtml(ch)}" ${checked}>
+                    <span class="mp-chat-ch-dot" style="background:${color}"></span>
+                    <span class="mp-chat-ch-name">${escHtml(ch)}</span>
+                `;
+                chatChannelList.appendChild(label);
+            });
+        };
+
+        chatChannelList && chatChannelList.addEventListener('change', (e) => {
+            if (!e.target.classList.contains('mp-chat-ch-checkbox')) return;
+            const ch = e.target.getAttribute('data-channel');
+            if (!ch) return;
+            if (e.target.checked) chatEnabledChannels.add(ch);
+            else chatEnabledChannels.delete(ch);
+            persistEnabledChannels();
+            renderChatMessages();
+        });
+
+        /* ── Slot sidebar chat panels ── */
+        const rebuildSlotSidebars = () => {
+            slots.forEach((slot) => {
+                const slotEl = slotGrid.querySelector(`.mp-slot[data-slot-id="${slot.id}"]`);
+                if (!slotEl) return;
+                const existing = slotEl.querySelector('.mp-slot-chat-sidebar');
+                if (!chatSidebarMode) {
+                    if (existing) existing.remove();
+                    return;
+                }
+                if (!existing) {
+                    const sidebar = document.createElement('div');
+                    sidebar.className = 'mp-slot-chat-sidebar';
+                    sidebar.dataset.slotId = slot.id;
+                    sidebar.innerHTML = `
+                        <div class="mp-slot-chat-sidebar-inner">
+                            <div class="mp-slot-chat-list" id="slot-chat-${slot.id}"
+                                role="log" aria-label="Chat for ${escHtml(slot.recording.channel)}"
+                                aria-live="polite"></div>
+                        </div>
+                    `;
+                    slotEl.appendChild(sidebar);
+                }
+            });
+            /* Render updated messages into sidebars */
+            renderSlotSidebarMessages();
+        };
+
+        /* ── Playback position → UTC ms ── */
+        const getPrimaryUtcMs = () => {
+            const primary = slots[primarySlotIndex] || slots[0];
+            if (!primary || !primary.startUtcMs || !primary.videoEl) return null;
+            return Math.round(primary.startUtcMs + primary.videoEl.currentTime * 1000);
+        };
+
+        /* ── Chat message rendering helpers ── */
+        const escHtmlChat = (v) => String(v ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+        const fmtChatTime = (utcMs) => {
+            if (!utcMs) return '';
+            const d = new Date(utcMs);
+            return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        };
+
+        const buildChatMessageEl = (msg, channelKey, showChannel) => {
+            const color = getChannelColor(channelKey);
+            const el = document.createElement('div');
+            el.className = 'mp-chat-item';
+            el.dataset.utcMs = String(msg.utc_ms);
+            let channelBadge = '';
+            if (showChannel) {
+                channelBadge = `<span class="mp-chat-channel-badge" style="border-color:${color};color:${color}">${escHtmlChat(channelKey)}</span>`;
+            }
+            el.innerHTML = `
+                <span class="mp-chat-author" style="color:${color}">${escHtmlChat(msg.author)}</span>
+                ${channelBadge}
+                <span class="mp-chat-colon" aria-hidden="true">:</span>
+                <span class="mp-chat-text">${escHtmlChat(msg.text)}</span>
+            `;
+            return el;
+        };
+
+        const scrollChatToBottom = (listEl) => {
+            if (!listEl) return;
+            listEl.scrollTop = listEl.scrollHeight;
+        };
+
+        const isChatNearBottom = (listEl) => {
+            if (!listEl) return true;
+            return (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight) < 80;
+        };
+
+        /* ── Render merged view ── */
+        const renderMergedChat = () => {
+            if (!chatMergedList) return;
+            const wasNearBottom = isChatNearBottom(chatMergedList);
+
+            /* Collect all enabled messages, sorted by utc_ms */
+            const allMsgs = [];
+            for (const [ch, data] of Object.entries(chatData)) {
+                if (!chatEnabledChannels.has(ch)) continue;
+                if (!data || !Array.isArray(data.messages)) continue;
+                data.messages.forEach((m) => allMsgs.push({ ...m, _channel: ch }));
+            }
+            allMsgs.sort((a, b) => a.utc_ms - b.utc_ms);
+
+            chatMergedList.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+            allMsgs.forEach((m) => {
+                fragment.appendChild(buildChatMessageEl(m, m._channel, true));
+            });
+            chatMergedList.appendChild(fragment);
+
+            if (wasNearBottom || chatAutoFollow) scrollChatToBottom(chatMergedList);
+        };
+
+        /* ── Render columns view ── */
+        const renderColumnsChat = () => {
+            if (!chatColumnsEl) return;
+            chatColumnsEl.innerHTML = '';
+            const channels = [...new Set(slots.map((s) => s.recording.channel).filter(Boolean))];
+            channels.forEach((ch) => {
+                if (!chatEnabledChannels.has(ch)) return;
+                const data = chatData[ch];
+                const color = getChannelColor(ch);
+                const col = document.createElement('div');
+                col.className = 'mp-chat-column';
+                col.dataset.channel = ch;
+                const header = document.createElement('div');
+                header.className = 'mp-chat-col-header';
+                header.innerHTML = `<span class="mp-chat-ch-dot" style="background:${color}"></span>
+                    <span class="mp-chat-col-name">${escHtmlChat(ch)}</span>`;
+                const list = document.createElement('div');
+                list.className = 'mp-chat-list mp-chat-col-list';
+                list.setAttribute('role', 'log');
+                list.setAttribute('aria-label', `Chat for ${escHtmlChat(ch)}`);
+                list.setAttribute('aria-live', 'polite');
+                if (data && Array.isArray(data.messages)) {
+                    data.messages.forEach((m) => {
+                        list.appendChild(buildChatMessageEl(m, ch, false));
+                    });
+                }
+                col.appendChild(header);
+                col.appendChild(list);
+                chatColumnsEl.appendChild(col);
+                scrollChatToBottom(list);
+            });
+        };
+
+        /* ── Render per-slot sidebars ── */
+        const renderSlotSidebarMessages = () => {
+            if (!chatSidebarMode) return;
+            slots.forEach((slot) => {
+                const ch = slot.recording.channel;
+                const listEl = document.getElementById(`slot-chat-${slot.id}`);
+                if (!listEl) return;
+                const data = chatData[ch];
+                const wasNearBottom = isChatNearBottom(listEl);
+                listEl.innerHTML = '';
+                if (data && Array.isArray(data.messages)) {
+                    const fragment = document.createDocumentFragment();
+                    data.messages.forEach((m) => fragment.appendChild(buildChatMessageEl(m, ch, false)));
+                    listEl.appendChild(fragment);
+                }
+                if (wasNearBottom) scrollChatToBottom(listEl);
+            });
+        };
+
+        /* ── Render dispatch ── */
+        const renderChatMessages = () => {
+            if (chatMode === 'columns') {
+                renderColumnsChat();
+            } else {
+                renderMergedChat();
+            }
+            renderSlotSidebarMessages();
+        };
+
+        /* ── Chat fetch ── */
+        let chatFetchInFlight = false;
+
+        const fetchChatForAllSlots = async () => {
+            if (chatFetchInFlight) return;
+            if (slots.length === 0) return;
+            const primaryUtcMs = getPrimaryUtcMs();
+            if (!primaryUtcMs) return;
+
+            chatFetchInFlight = true;
+            try {
+                const uniqueChannelSlots = [];
+                const seen = new Set();
+                slots.forEach((slot) => {
+                    const ch = slot.recording.channel;
+                    if (!seen.has(ch)) {
+                        seen.add(ch);
+                        uniqueChannelSlots.push(slot);
+                    }
+                });
+
+                await Promise.all(uniqueChannelSlots.map(async (slot) => {
+                    const ch = slot.recording.channel;
+                    if (!slot.recording.chat_url) return;
+                    /* Compute target_ms for this slot: account for its UTC offset */
+                    let targetMs = primaryUtcMs;
+                    if (slot.startUtcMs) {
+                        const slotCurrentTime = slot.videoEl ? slot.videoEl.currentTime : 0;
+                        targetMs = Math.round(slot.startUtcMs + slotCurrentTime * 1000);
+                    }
+                    try {
+                        const url = `${slot.recording.chat_url}?target_ms=${targetMs}&window_ms=${CHAT_WINDOW_MS}&limit=200`;
+                        const res = await fetch(url, {
+                            cache: 'no-store',
+                            headers: { 'X-Requested-With': 'vstreamware-multi-player-chat' },
+                        });
+                        if (!res.ok) return;
+                        const payload = await res.json();
+                        if (!payload.available) {
+                            chatData[ch] = { messages: [], latestUtcMs: null, available: false };
+                            return;
+                        }
+                        chatData[ch] = {
+                            messages: Array.isArray(payload.messages) ? payload.messages : [],
+                            latestUtcMs: payload.latest_utc_ms || null,
+                            available: true,
+                        };
+                    } catch (_e) {
+                        /* ignore per-channel fetch errors */
+                    }
+                }));
+
+                updateChatStatus();
+                renderChatMessages();
+            } finally {
+                chatFetchInFlight = false;
+            }
+        };
+
+        const updateChatStatus = () => {
+            if (!chatStatusEl) return;
+            if (slots.length === 0) {
+                chatStatusEl.textContent = 'Add videos to start chat replay.';
+                chatStatusEl.hidden = false;
+                return;
+            }
+            const anyAvailable = Object.values(chatData).some((d) => d && d.available);
+            if (!anyAvailable) {
+                chatStatusEl.textContent = 'No chat data available for loaded videos.';
+                chatStatusEl.hidden = false;
+            } else {
+                chatStatusEl.hidden = true;
+            }
+        };
+
+        /* ── Chat polling ── */
+        const stopChatPoll = () => {
+            if (chatPollTimer !== null) {
+                window.clearInterval(chatPollTimer);
+                chatPollTimer = null;
+            }
+        };
+
+        const scheduleChatPoll = () => {
+            stopChatPoll();
+            chatPollTimer = window.setInterval(() => {
+                if (document.hidden) return;
+                if (!isChatOpen() && !chatSidebarMode) return;
+                void fetchChatForAllSlots();
+            }, CHAT_POLL_MS);
+        };
+
+        /* ── Jump-to-latest button ── */
+        if (chatJumpBtn) {
+            chatMergedList && chatMergedList.addEventListener('scroll', () => {
+                if (chatJumpBtn) chatJumpBtn.hidden = isChatNearBottom(chatMergedList);
+            });
+            chatJumpBtn.addEventListener('click', () => {
+                scrollChatToBottom(chatMergedList);
+                chatJumpBtn.hidden = true;
+                chatAutoFollow = true;
+            });
+        }
+
+        /* ── Public hook: called from addSlot / removeSlot ── */
+        const onSlotsChanged = () => {
+            renderChannelSelector();
+            rebuildSlotSidebars();
+            updateChatStatus();
+            /* Start/stop polling based on whether chat is needed */
+            if (isChatOpen() || chatSidebarMode) {
+                if (!chatPollTimer) scheduleChatPoll();
+                void fetchChatForAllSlots();
+            }
+        };
+
+        /* Initialize mode buttons from persisted state */
+        (() => {
+            try {
+                const raw = window.localStorage.getItem(CHAT_MODE_KEY);
+                if (raw === 'columns' || raw === 'merged') chatMode = raw;
+            } catch (_e) {}
+            setChatMode(chatMode, false);
+
+            try {
+                const raw = window.localStorage.getItem(CHAT_SIDEBAR_KEY);
+                if (raw === '1' || raw === 'true') setSidebarMode(true, false);
+            } catch (_e) {}
+
+            const persistedChannels = readPersistedEnabledChannels();
+            if (persistedChannels) chatEnabledChannels = persistedChannels;
+        })();
+
         /* ── Catalog fetch ── */
         const fetchCatalog = async ({ force = false } = {}) => {
             try {
@@ -926,6 +1598,7 @@
                     display_title:         String(r.display_title || r.file_name || ''),
                     relative_path:         String(r.relative_path || ''),
                     media_url:             String(r.media_url || ''),
+                    chat_url:              String(r.chat_url || ''),
                     thumbnail_url:         String(r.thumbnail_url || ''),
                     view_url:              String(r.view_url || ''),
                     recorded_at:           String(r.recorded_at || ''),
@@ -1064,17 +1737,32 @@
 
         /* ── Visibility / cleanup ── */
         document.addEventListener('visibilitychange', () => {
-            if (document.hidden) { stopSyncTimer(); return; }
+            if (document.hidden) { stopSyncTimer(); stopChatPoll(); return; }
             if (slots.some((s) => s.videoEl && !s.videoEl.paused)) startSyncTimer();
+            if ((isChatOpen() || chatSidebarMode) && slots.length > 0) {
+                scheduleChatPoll();
+                void fetchChatForAllSlots();
+            }
             fetchCatalog();
         });
-        window.addEventListener('beforeunload', stopSyncTimer);
+        window.addEventListener('beforeunload', () => { stopSyncTimer(); stopChatPoll(); });
 
         /* ── Boot ── */
+        /* Restore chat panel open state (deferred here so scheduleChatPoll is defined) */
+        (() => {
+            try {
+                const raw = window.localStorage.getItem(CHAT_PANEL_KEY);
+                if (raw === '1' || raw === 'true') setChatOpen(true, false);
+                else updateChatToggleState();
+            } catch (_e) { updateChatToggleState(); }
+        })();
+
         fetchCatalog({ force: true });
         /* Poll catalog every 10 s */
         window.setInterval(() => fetchCatalog(), 10_000);
+        /* Kick off chat polling if sidebar mode was restored (panel open handled by setChatOpen above) */
+        if (!isChatOpen() && chatSidebarMode) scheduleChatPoll();
     })();
     </script>
 </body>
-</html>viid
+</html>
