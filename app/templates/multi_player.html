@@ -22,34 +22,38 @@
     <!-- Shared panel overlay backdrop (mobile) -->
     <div class="panel-overlay" id="mp-panel-overlay" aria-hidden="true"></div>
     <main class="container mp-main">
-        <!-- ── Page header ── -->
-        <header class="page-header browser-header">
-            <h1 class="app-title">
-                <a class="app-title-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
-                    <img class="app-title-icon" src="{{ url_for('static', filename='icons/icon-64.png') }}" alt="VStreamware icon">
-                    <span>VStreamware</span>
-                </a>
-            </h1>
-            <div class="header-actions">
-                <div class="header-transcode-indicator" id="header-transcode-indicator" hidden role="status" aria-live="polite" aria-atomic="true">
-                    <span class="header-transcode-dot" aria-hidden="true"></span>
-                    <span class="header-transcode-label" id="header-transcode-label">Transcoding</span>
-                </div>
-                <a class="header-icon-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
-                    <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M3 10.5 12 3l9 7.5"></path>
-                        <path d="M5 9.5V21h14V9.5"></path>
-                    </svg>
-                    <span class="sr-only">Home</span>
-                </a>
-            </div>
-        </header>
 
         <!-- ── Multi-player shell ── -->
         <div class="multi-player-page">
 
+        <!-- ── Collapsible header (page header + toolbar) ── -->
+        <div class="mp-header-wrap" id="mp-header-wrap">
+
+            <!-- Page header -->
+            <header class="page-header browser-header">
+                <h1 class="app-title">
+                    <a class="app-title-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
+                        <img class="app-title-icon" src="{{ url_for('static', filename='icons/icon-64.png') }}" alt="VStreamware icon">
+                        <span>VStreamware</span>
+                    </a>
+                </h1>
+                <div class="header-actions">
+                    <div class="header-transcode-indicator" id="header-transcode-indicator" hidden role="status" aria-live="polite" aria-atomic="true">
+                        <span class="header-transcode-dot" aria-hidden="true"></span>
+                        <span class="header-transcode-label" id="header-transcode-label">Transcoding</span>
+                    </div>
+                    <a class="header-icon-link" href="{{ url_for('dashboard.index') }}" aria-label="Go to home">
+                        <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3 10.5 12 3l9 7.5"></path>
+                            <path d="M5 9.5V21h14V9.5"></path>
+                        </svg>
+                        <span class="sr-only">Home</span>
+                    </a>
+                </div>
+            </header>
+
             <!-- Toolbar -->
-            <div class="mp-toolbar" role="toolbar" aria-label="Multi-player controls">
+            <div class="mp-toolbar" id="mp-toolbar" role="toolbar" aria-label="Multi-player controls">
                 <button
                     type="button"
                     class="panel-hamburger mp-picker-toggle"
@@ -87,7 +91,39 @@
                         data-expanded-label="Hide Chat"
                         data-collapsed-label="Show Chat">Show Chat</span>
                 </button>
+
+                <!-- Header collapse button — rightmost in toolbar -->
+                <button
+                    type="button"
+                    class="mp-header-collapse-btn"
+                    id="mp-header-collapse-btn"
+                    aria-label="Collapse header"
+                    aria-controls="mp-header-wrap"
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M18 15l-6-6-6 6"/>
+                    </svg>
+                </button>
             </div>
+
+        </div><!-- /.mp-header-wrap -->
+
+        <!-- Floating restore button — visible when header is collapsed -->
+        <button
+            type="button"
+            class="mp-header-show-btn"
+            id="mp-header-show-btn"
+            aria-label="Show header"
+            aria-controls="mp-header-wrap"
+            hidden
+        >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 10.5 12 3l9 7.5"/>
+                <path d="M5 9.5V21h14V9.5"/>
+            </svg>
+        </button>
 
             <!-- Body: picker + stage -->
             <div class="mp-body">
@@ -202,6 +238,13 @@
                                     <span>Per-Slot</span>
                                 </button>
 
+                                <!-- Jump to latest (shown when scrolled up) -->
+                                <button type="button" class="button-link mp-chat-jump"
+                                    id="mp-chat-jump" hidden aria-label="Jump to latest messages">
+                                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:3px"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                                    Latest
+                                </button>
+
                             </div>
                         </header>
 
@@ -226,9 +269,7 @@
                             <!-- Columns view -->
                             <div class="mp-chat-columns" id="mp-chat-columns" hidden></div>
 
-                            <!-- Jump to latest -->
-                            <button type="button" class="button-link chat-jump-latest mp-chat-jump"
-                                id="mp-chat-jump" hidden>Jump To Latest</button>
+
                         </div>
 
                     </section>
@@ -294,6 +335,9 @@
         const mpPanelOverlay = document.getElementById('mp-panel-overlay');
         const pickerCloseBtn = document.getElementById('mp-picker-close');
         const chatCloseBtn   = document.getElementById('mp-chat-close');
+        const mpHeaderWrap      = document.getElementById('mp-header-wrap');
+        const mpHeaderCollapseBtn = document.getElementById('mp-header-collapse-btn');
+        const mpHeaderShowBtn   = document.getElementById('mp-header-show-btn');
 
         /* ── Chat panel state ── */
         const CHAT_PANEL_KEY       = 'vstreamware.mp-chat-open';
@@ -382,6 +426,50 @@
             }
         };
 
+        /* ── Page reference (used by header collapse + picker collapse) ── */
+        const mpPage = document.querySelector('.multi-player-page');
+
+        /* ── Header collapse ──────────────────────────────────────────────────── */
+        const HEADER_COLLAPSE_KEY   = 'vstreamware.mp-header-collapsed';
+        const HEADER_COLLAPSE_CLASS = 'mp-header-collapsed';
+
+        const isHeaderCollapsed = () =>
+            Boolean(mpPage && mpPage.classList.contains(HEADER_COLLAPSE_CLASS));
+
+        const setHeaderCollapsed = (collapsed, persist = true) => {
+            if (!mpPage) return;
+            mpPage.classList.toggle(HEADER_COLLAPSE_CLASS, Boolean(collapsed));
+            /* Show/hide the floating restore button */
+            if (mpHeaderShowBtn) mpHeaderShowBtn.hidden = !collapsed;
+            /* Update aria-expanded on the collapse button */
+            if (mpHeaderCollapseBtn) {
+                mpHeaderCollapseBtn.setAttribute('aria-label',
+                    collapsed ? 'Expand header' : 'Collapse header');
+            }
+            if (persist) {
+                try { window.localStorage.setItem(HEADER_COLLAPSE_KEY, collapsed ? '1' : '0'); }
+                catch (_e) {}
+            }
+        };
+
+        /* Restore persisted state */
+        (() => {
+            try {
+                const raw = window.localStorage.getItem(HEADER_COLLAPSE_KEY);
+                if (raw === '1' || raw === 'true') setHeaderCollapsed(true, false);
+            } catch (_e) {}
+        })();
+
+        if (mpHeaderCollapseBtn) {
+            mpHeaderCollapseBtn.addEventListener('click', () =>
+                setHeaderCollapsed(!isHeaderCollapsed()));
+        }
+
+        if (mpHeaderShowBtn) {
+            mpHeaderShowBtn.addEventListener('click', () =>
+                setHeaderCollapsed(false));
+        }
+
         if (mpPanelOverlay) {
             mpPanelOverlay.addEventListener('click', () => {
                 if (mpOverlayOwner) closeMobilePanel(mpOverlayOwner);
@@ -399,7 +487,6 @@
         const PICKER_COLLAPSE_KEY  = 'vstreamware.mp-picker-collapsed';
         const PICKER_COLLAPSE_CLASS = 'mp-picker-collapsed';
 
-        const mpPage = document.querySelector('.multi-player-page');
         const pickerPanel = document.getElementById('mp-picker-panel');
 
         const updatePickerToggleState = () => {
@@ -1298,6 +1385,7 @@
                 try { window.localStorage.setItem(CHAT_MODE_KEY, chatMode); } catch (_e) {}
             }
             renderChatMessages();
+            window.requestAnimationFrame(() => updateJumpBtn());
         };
 
         document.addEventListener('click', (e) => {
@@ -1319,7 +1407,6 @@
 
         const setSidebarMode = (enabled, persist = true) => {
             chatSidebarMode = Boolean(enabled);
-            const mpPage = document.querySelector('.multi-player-page');
             if (mpPage) mpPage.classList.toggle(MP_SIDEBAR_CLASS, chatSidebarMode);
             if (chatSidebarToggle) {
                 chatSidebarToggle.setAttribute('aria-pressed', chatSidebarMode ? 'true' : 'false');
@@ -1476,6 +1563,21 @@
             return (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight) < 80;
         };
 
+        /* ── Jump button: shown when any visible chat list is not at the bottom ── */
+        const updateJumpBtn = () => {
+            if (!chatJumpBtn) return;
+            let anyScrolledUp = false;
+            if (chatMode === 'merged') {
+                anyScrolledUp = !isChatNearBottom(chatMergedList);
+            } else {
+                /* columns: check every column list */
+                chatColumnsEl && chatColumnsEl.querySelectorAll('.mp-chat-list').forEach((el) => {
+                    if (!isChatNearBottom(el)) anyScrolledUp = true;
+                });
+            }
+            chatJumpBtn.hidden = !anyScrolledUp;
+        };
+
         /* ── Render merged view ── */
         const renderMergedChat = () => {
             if (!chatMergedList) return;
@@ -1497,40 +1599,83 @@
             });
             chatMergedList.appendChild(fragment);
 
-            if (wasNearBottom || chatAutoFollow) scrollChatToBottom(chatMergedList);
+            if (wasNearBottom || chatAutoFollow) {
+                window.requestAnimationFrame(() => {
+                    scrollChatToBottom(chatMergedList);
+                    updateJumpBtn();
+                });
+            } else {
+                updateJumpBtn();
+            }
         };
 
         /* ── Render columns view ── */
         const renderColumnsChat = () => {
             if (!chatColumnsEl) return;
-            chatColumnsEl.innerHTML = '';
-            const channels = [...new Set(slots.map((s) => s.recording.channel).filter(Boolean))];
+
+            const channels = [...new Set(slots.map((s) => s.recording.channel).filter(Boolean))]
+                .filter((ch) => chatEnabledChannels.has(ch));
+
+            /* Build a set of channel keys currently rendered */
+            const renderedKeys = new Set(
+                Array.from(chatColumnsEl.querySelectorAll('.mp-chat-column'))
+                    .map((el) => el.dataset.channel)
+            );
+            const wantedKeys = new Set(channels);
+
+            /* Remove columns no longer needed */
+            chatColumnsEl.querySelectorAll('.mp-chat-column').forEach((el) => {
+                if (!wantedKeys.has(el.dataset.channel)) el.remove();
+            });
+
+            /* Add or update each channel column */
             channels.forEach((ch) => {
-                if (!chatEnabledChannels.has(ch)) return;
                 const data = chatData[ch];
                 const color = getChannelColor(ch);
-                const col = document.createElement('div');
-                col.className = 'mp-chat-column';
-                col.dataset.channel = ch;
-                const header = document.createElement('div');
-                header.className = 'mp-chat-col-header';
-                header.innerHTML = `<span class="mp-chat-ch-dot" style="background:${color}"></span>
-                    <span class="mp-chat-col-name">${escHtmlChat(ch)}</span>`;
-                const list = document.createElement('div');
-                list.className = 'mp-chat-list mp-chat-col-list';
-                list.setAttribute('role', 'log');
-                list.setAttribute('aria-label', `Chat for ${escHtmlChat(ch)}`);
-                list.setAttribute('aria-live', 'polite');
-                if (data && Array.isArray(data.messages)) {
-                    data.messages.forEach((m) => {
-                        list.appendChild(buildChatMessageEl(m, ch, false));
-                    });
+
+                let col = chatColumnsEl.querySelector(`.mp-chat-column[data-channel="${CSS.escape(ch)}"]`);
+                let list;
+
+                if (!col) {
+                    /* Create fresh column */
+                    col = document.createElement('div');
+                    col.className = 'mp-chat-column';
+                    col.dataset.channel = ch;
+                    const header = document.createElement('div');
+                    header.className = 'mp-chat-col-header';
+                    header.innerHTML = `<span class="mp-chat-ch-dot" style="background:${color}"></span>
+                        <span class="mp-chat-col-name">${escHtmlChat(ch)}</span>`;
+                    list = document.createElement('div');
+                    list.className = 'mp-chat-list mp-chat-col-list';
+                    list.setAttribute('role', 'log');
+                    list.setAttribute('aria-label', `Chat for ${escHtmlChat(ch)}`);
+                    list.setAttribute('aria-live', 'polite');
+                    col.appendChild(header);
+                    col.appendChild(list);
+                    chatColumnsEl.appendChild(col);
+                } else {
+                    list = col.querySelector('.mp-chat-list');
                 }
-                col.appendChild(header);
-                col.appendChild(list);
-                chatColumnsEl.appendChild(col);
-                scrollChatToBottom(list);
+
+                if (!list) return;
+
+                /* Snapshot scroll state BEFORE re-rendering */
+                const wasNearBottom = !renderedKeys.has(ch) || isChatNearBottom(list);
+
+                list.innerHTML = '';
+                if (data && Array.isArray(data.messages)) {
+                    const fragment = document.createDocumentFragment();
+                    data.messages.forEach((m) => fragment.appendChild(buildChatMessageEl(m, ch, false)));
+                    list.appendChild(fragment);
+                }
+
+                /* Scroll after the browser has laid out the new content */
+                if (wasNearBottom) {
+                    window.requestAnimationFrame(() => scrollChatToBottom(list));
+                }
             });
+
+            window.requestAnimationFrame(() => updateJumpBtn());
         };
 
         /* ── Render per-slot sidebars ── */
@@ -1655,14 +1800,23 @@
         };
 
         /* ── Jump-to-latest button ── */
+        /* Scroll listener on merged list */
+        chatMergedList && chatMergedList.addEventListener('scroll', () => updateJumpBtn());
+
+        /* Delegated scroll listener on columns container (covers all column lists) */
+        chatColumnsEl && chatColumnsEl.addEventListener('scroll', () => updateJumpBtn(), true);
+
         if (chatJumpBtn) {
-            chatMergedList && chatMergedList.addEventListener('scroll', () => {
-                if (chatJumpBtn) chatJumpBtn.hidden = isChatNearBottom(chatMergedList);
-            });
             chatJumpBtn.addEventListener('click', () => {
-                scrollChatToBottom(chatMergedList);
-                chatJumpBtn.hidden = true;
+                if (chatMode === 'merged') {
+                    scrollChatToBottom(chatMergedList);
+                } else {
+                    chatColumnsEl && chatColumnsEl.querySelectorAll('.mp-chat-list').forEach(
+                        (el) => scrollChatToBottom(el)
+                    );
+                }
                 chatAutoFollow = true;
+                chatJumpBtn.hidden = true;
             });
         }
 

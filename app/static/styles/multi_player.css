@@ -22,7 +22,8 @@
     min-height: 0;
 }
 
-.mp-root-body .mp-main > .page-header {
+/* page-header is now inside .mp-header-wrap inside .multi-player-page */
+.mp-root-body .mp-main .page-header {
     flex-shrink: 0;
 }
 
@@ -32,6 +33,7 @@
     flex: 1 1 0;
     min-height: 0;
     overflow: hidden;
+    position: relative; /* anchor for the floating header-show btn */
 }
 
 /* ── Header toolbar ──────────────────────────────────────────────────────────── */
@@ -1206,15 +1208,33 @@ body.is-mp-chat-resizing * {
     min-width: 0;
 }
 
-/* Jump-to-latest button */
+/* Jump-to-latest button — lives in the header controls row */
 .mp-chat-jump {
-    align-self: flex-end;
+    display: inline-flex;
+    align-items: center;
     padding: 4px 8px;
     font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
     flex-shrink: 0;
     border-color: #4b6a8f;
     background: #1f3248;
-    line-height: 1.2;
+    color: #93c5fd;
+    border-radius: 7px;
+    white-space: nowrap;
+    animation: mp-jump-pulse 1.6s ease-in-out infinite;
+}
+
+.mp-chat-jump:hover {
+    background: #27415f;
+    border-color: #6ea6dc;
+    color: #bfdbfe;
+    animation: none;
+}
+
+@keyframes mp-jump-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(147, 197, 253, 0); }
+    50%       { box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.25); }
 }
 
 .mp-chat-jump[hidden] {
@@ -1315,6 +1335,105 @@ body.is-mp-chat-resizing * {
 .mp-panel-close-btn:hover {
     background: #444;
     color: var(--text);
+}
+
+/* ── Collapsible header wrap ────────────────────────────────────────────────── */
+
+.mp-header-wrap {
+    flex-shrink: 0;
+    overflow: hidden;
+    /* Animate collapse via max-height */
+    max-height: 200px;
+    transition: max-height 0.22s ease;
+}
+
+.mp-header-collapsed .mp-header-wrap {
+    max-height: 0;
+}
+
+/* When header is collapsed, restore the top border + corners on .mp-body */
+.mp-header-collapsed .mp-body {
+    border-top: 1px solid var(--panel-border);
+    border-radius: 10px 10px 10px 10px;
+}
+
+/* Collapse toggle button — sits inside the toolbar at the far right */
+.mp-header-collapse-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 7px;
+    border: 1px solid var(--panel-border);
+    background: transparent;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: 4px;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+}
+
+.mp-header-collapse-btn svg {
+    width: 14px;
+    height: 14px;
+    display: block;
+    transition: transform 0.22s ease;
+}
+
+.mp-header-collapse-btn:hover {
+    background: #2e2e2e;
+    color: var(--text);
+}
+
+.mp-header-collapse-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(110, 166, 220, 0.38);
+}
+
+/* Rotate chevron when header is collapsed */
+.mp-header-collapsed .mp-header-collapse-btn svg {
+    transform: rotate(180deg);
+}
+
+/* Floating restore button — shown in top-left corner when header is hidden */
+.mp-header-show-btn {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 20;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid #3d5a7a;
+    background: rgba(20, 30, 48, 0.88);
+    color: #93c5fd;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    transition: background 0.14s ease, border-color 0.14s ease;
+    backdrop-filter: blur(4px);
+}
+
+.mp-header-show-btn svg {
+    width: 15px;
+    height: 15px;
+    display: block;
+}
+
+.mp-header-show-btn:hover {
+    background: rgba(30, 50, 72, 0.95);
+    border-color: #6ea6dc;
+    color: #bfdbfe;
+}
+
+.mp-header-show-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(110, 166, 220, 0.38);
 }
 
 /* ── Picker collapse (desktop only) ─────────────────────────────────────────── */
