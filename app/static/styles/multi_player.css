@@ -1333,32 +1333,123 @@ body.is-mp-chat-resizing * {
 
 @media (max-width: 980px) {
 
-    /* ── Page structure: scrollable, not fixed-height viewport ── */
+    /* ── Break the fixed-height viewport chain ── */
+    /* Desktop locks html→body→main→page to 100dvh so videos fill the screen.
+       On mobile we want a normal scrolling page instead. */
+
     .mp-root-body {
-        height: auto;
-        overflow: auto;
+        height: auto !important;
+        overflow: auto !important;
     }
 
     .mp-root-body .mp-main {
-        height: auto;
-        overflow: visible;
-        min-height: 100dvh;
+        height: auto !important;
+        overflow: visible !important;
+        min-height: 0 !important;
     }
 
     .multi-player-page {
-        flex: none;
-        min-height: 0;
-        overflow: visible;
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        flex: none !important;
     }
 
-    /* Body: single-column flex, full-width */
+    /* ── Body: single column, no grid ── */
+    /* The picker is position:fixed so only mp-stage-chat-wrap stays in flow */
     .mp-body {
-        display: flex;
-        flex-direction: column;
-        flex: none;
-        min-height: 0;
+        display: block !important;
+        height: auto !important;
+        overflow: visible !important;
         border-radius: 0 0 10px 10px;
     }
+
+    /* ── Stage + chat wrap: block, auto height ── */
+    .mp-stage-chat-wrap {
+        display: block !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* ── Stage: block, auto height ── */
+    .mp-stage {
+        display: block !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* Sync bar stays flex but wraps */
+    .mp-sync-bar {
+        display: flex;
+        flex-wrap: wrap;
+        padding: 6px 10px;
+        gap: 6px;
+    }
+
+    .mp-sync-seek {
+        flex-basis: 100%;
+        order: 10;
+    }
+
+    /* ── Slot grid: block so it sizes from content ── */
+    .mp-slot-grid {
+        display: grid !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* Single column, auto rows so content drives height */
+    .mp-slot-grid[data-count="1"],
+    .mp-slot-grid[data-count="2"],
+    .mp-slot-grid[data-count="3"],
+    .mp-slot-grid[data-count="4"] {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+    }
+
+    .mp-slot-grid[data-count="3"] .mp-slot:first-child {
+        grid-column: 1;
+    }
+
+    /* ── Each slot: block layout, sized by 16:9 video ── */
+    .mp-slot {
+        display: block !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* Header and controls are block children, they stack naturally */
+    .mp-slot-header {
+        display: flex; /* keep flex for its own internal layout */
+    }
+
+    .mp-slot-controls {
+        display: flex; /* keep flex for its own internal layout */
+    }
+
+    /* Video wrap: 16:9 aspect ratio box */
+    .mp-slot-video-wrap {
+        display: block;
+        position: relative;
+        width: 100%;
+        height: 0;
+        padding-bottom: 56.25%; /* 9/16 = 56.25% */
+        flex: none;
+        max-height: none;
+        background: #000;
+    }
+
+    /* Video fills the padding-bottom box absolutely */
+    .mp-slot-video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        max-height: none;
+    }
+
+    /* Loading overlay already position:absolute so it still works */
 
     /* ── Picker panel: fixed slide-in overlay from left ── */
     .mp-picker-panel {
@@ -1367,7 +1458,8 @@ body.is-mp-chat-resizing * {
         left: 0;
         bottom: 0;
         width: min(88vw, 340px);
-        max-height: none;
+        height: 100% !important;
+        max-height: none !important;
         z-index: 60;
         border-right: 1px solid var(--panel-border);
         border-bottom: none;
@@ -1376,7 +1468,7 @@ body.is-mp-chat-resizing * {
         transform: translateX(-105%);
         transition: transform 0.24s ease;
         pointer-events: none;
-        display: flex;
+        display: flex !important;
         flex-direction: column;
         overflow: hidden;
     }
@@ -1386,7 +1478,6 @@ body.is-mp-chat-resizing * {
         pointer-events: auto;
     }
 
-    /* Show close button inside picker on mobile */
     .mp-picker-panel .mp-panel-close-btn {
         display: inline-flex;
     }
@@ -1396,20 +1487,6 @@ body.is-mp-chat-resizing * {
         max-height: none;
         flex: 1;
         overflow-y: auto;
-    }
-
-    /* ── Stage + chat wrap: natural vertical flow ── */
-    .mp-stage-chat-wrap {
-        flex-direction: column;
-        overflow: visible;
-        flex: none;
-    }
-
-    /* Stage: natural height, no overflow clipping */
-    .mp-stage {
-        min-height: 0;
-        overflow: visible;
-        flex: none;
     }
 
     /* ── Chat panel: fixed slide-in overlay from right ── */
@@ -1423,6 +1500,7 @@ body.is-mp-chat-resizing * {
         right: 0;
         bottom: 0;
         width: min(88vw, 380px);
+        height: 100% !important;
         min-width: 0;
         max-width: none;
         max-height: none;
@@ -1433,25 +1511,20 @@ body.is-mp-chat-resizing * {
         transform: translateX(105%);
         transition: transform 0.24s ease;
         pointer-events: none;
-        /* override the hidden attribute so the panel is always in the DOM flow
-           for its transition to work; visibility is controlled via transform */
         display: flex !important;
         flex-direction: column;
         overflow: hidden;
     }
 
-    /* When open: slide in from right */
     .mp-stage-chat-wrap.mp-chat-open .mp-chat-panel {
         transform: translateX(0);
         pointer-events: auto;
     }
 
-    /* Show close button inside chat panel on mobile */
     .mp-chat-panel .mp-panel-close-btn {
         display: inline-flex;
     }
 
-    /* Ensure panel shell fills the fixed panel height */
     .mp-chat-panel .panel-shell {
         height: 100%;
         display: flex;
@@ -1459,53 +1532,10 @@ body.is-mp-chat-resizing * {
         min-height: 0;
     }
 
-    /* ── Video slot grid: single-column portrait layout ── */
-    .mp-slot-grid {
-        /* Let the grid grow with its content on mobile */
-        flex: none;
-        height: auto;
-        overflow: visible;
-        min-height: 0;
-    }
-
-    /* Remove fixed fr rows — let slots size from their content */
-    .mp-slot-grid[data-count="1"],
-    .mp-slot-grid[data-count="2"],
-    .mp-slot-grid[data-count="3"],
-    .mp-slot-grid[data-count="4"] {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto;
-    }
-
-    .mp-slot-grid[data-count="3"] .mp-slot:first-child {
-        grid-column: 1;
-    }
-
-    /* Slots: height comes from the video aspect ratio */
-    .mp-slot {
-        min-height: 0;
-        height: auto;
-    }
-
-    /* Video wrap drives the slot height via aspect-ratio */
-    .mp-slot-video-wrap {
-        aspect-ratio: 16 / 9;
-        width: 100%;
-        flex: none;
-        height: auto;
-        max-height: none;
-    }
-
-    /* Video fills the aspect-ratio box naturally */
-    .mp-slot-video {
-        width: 100%;
-        height: 100%;
-        max-height: none;
-    }
-
-    /* Per-slot sidebar: stack below video on mobile */
+    /* ── Per-slot sidebar: stacks below video on mobile ── */
     .mp-chat-sidebar-mode .mp-slot {
-        grid-template-columns: 1fr;
+        display: block !important;
+        grid-template-columns: unset;
     }
 
     .mp-slot-chat-sidebar {
@@ -1515,18 +1545,6 @@ body.is-mp-chat-resizing * {
         border-top: 1px solid rgba(60, 60, 60, 0.7);
         max-height: 140px;
     }
-
-    /* Sync bar: full-width seek bar on its own row */
-    .mp-sync-bar {
-        flex-wrap: wrap;
-        padding: 6px 10px;
-        gap: 6px;
-    }
-
-    .mp-sync-seek {
-        flex-basis: 100%;
-        order: 10;
-    }
 }
 
 /* ── Landscape on mobile: 2-column video grid ────────────────────────────────── */
@@ -1534,16 +1552,25 @@ body.is-mp-chat-resizing * {
 @media (max-width: 980px) and (orientation: landscape) {
 
     .mp-slot-grid[data-count="2"],
+    .mp-slot-grid[data-count="3"],
     .mp-slot-grid[data-count="4"] {
-        grid-template-columns: 1fr 1fr;
-    }
-
-    .mp-slot-grid[data-count="3"] {
         grid-template-columns: 1fr 1fr;
     }
 
     .mp-slot-grid[data-count="3"] .mp-slot:first-child {
         grid-column: 1 / -1;
+    }
+
+    /* In 2-col layout each slot is ~50vw wide, so 16:9 height = 28vw */
+    .mp-slot-grid[data-count="2"] .mp-slot-video-wrap,
+    .mp-slot-grid[data-count="3"] .mp-slot-video-wrap,
+    .mp-slot-grid[data-count="4"] .mp-slot-video-wrap {
+        padding-bottom: 28.125%; /* 56.25% / 2 columns */
+    }
+
+    /* First slot in 3-count spans full width, restore full 16:9 */
+    .mp-slot-grid[data-count="3"] .mp-slot:first-child .mp-slot-video-wrap {
+        padding-bottom: 56.25%;
     }
 
     .mp-chat-panel {
