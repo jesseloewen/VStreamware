@@ -841,7 +841,6 @@
     height: 30px;
     border-radius: 8px;
     padding: 0;
-    margin-left: auto;  /* push to right edge */
 }
 
 /* When chat is open give it an accent */
@@ -1394,7 +1393,8 @@ body.is-mp-chat-resizing * {
 }
 
 /* Collapse toggle button — sits inside the toolbar at the far right */
-.mp-header-collapse-btn {
+.mp-header-collapse-btn,
+.mp-toolbar .mp-header-collapse-btn {
     width: 28px;
     height: 28px;
     padding: 0;
@@ -1406,14 +1406,14 @@ body.is-mp-chat-resizing * {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    margin-left: 4px;
+    margin-left: auto;  /* push collapse btn + chat toggle to right edge */
     cursor: pointer;
     transition: background 0.14s ease, color 0.14s ease;
 }
 
 .mp-header-collapse-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     display: block;
     transition: transform 0.22s ease;
 }
@@ -1438,43 +1438,48 @@ body.is-mp-chat-resizing * {
     display: none !important;
 }
 
-/* Floating restore button — matches the collapse button style exactly,
-   positioned in the top-right corner of .multi-player-page */
+/* Show-header button — slim bar spanning the top of the stage,
+   sits just below the sync bar in normal flow (no overlap) */
 .mp-header-show-btn {
-    position: absolute;
-    top: 6px;
-    right: 14px;
-    z-index: 10;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border-radius: 7px;
-    border: 1px solid var(--panel-border);
-    background: transparent;
+    width: 100%;
+    height: 22px;
+    padding: 0 12px;
+    border: none;
+    border-bottom: 1px solid var(--panel-border);
+    background: #1a1a1a;
     color: var(--muted);
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 5px;
     flex-shrink: 0;
     cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
     transition: background 0.14s ease, color 0.14s ease;
 }
 
 .mp-header-show-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
     display: block;
-    transition: transform 0.22s ease;
+    flex-shrink: 0;
+}
+
+.mp-header-show-label {
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
 .mp-header-show-btn:hover {
-    background: #2e2e2e;
+    background: #242424;
     color: var(--text);
 }
 
 .mp-header-show-btn:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px rgba(110, 166, 220, 0.38);
+    box-shadow: inset 0 0 0 2px rgba(110, 166, 220, 0.38);
 }
 
 /* ── Picker collapse (desktop only) ─────────────────────────────────────────── */

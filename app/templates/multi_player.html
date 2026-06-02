@@ -73,7 +73,21 @@
                     <button type="button" id="mp-clear-all" class="danger" aria-label="Remove all videos from the player">Clear All</button>
                 </div>
                 <span class="mp-sync-status" id="mp-sync-status" aria-live="polite"></span>
-                <!-- Chat panel toggle (right side of toolbar) -->
+                <!-- Header collapse button — rightmost in toolbar -->
+                <button
+                    type="button"
+                    class="mp-header-collapse-btn"
+                    id="mp-header-collapse-btn"
+                    aria-label="Collapse header"
+                    aria-controls="mp-header-wrap"
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                </button>
+
+                <!-- Chat panel toggle (rightmost in toolbar) -->
                 <button
                     type="button"
                     class="panel-hamburger mp-chat-toggle"
@@ -91,38 +105,11 @@
                         data-expanded-label="Hide Chat"
                         data-collapsed-label="Show Chat">Show Chat</span>
                 </button>
-
-                <!-- Header collapse button — rightmost in toolbar -->
-                <button
-                    type="button"
-                    class="mp-header-collapse-btn"
-                    id="mp-header-collapse-btn"
-                    aria-label="Collapse header"
-                    aria-controls="mp-header-wrap"
-                >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M6 9l6 6 6-6"/>
-                    </svg>
-                </button>
             </div>
 
         </div><!-- /.mp-header-wrap -->
 
-        <!-- Floating restore button — visible when header is collapsed -->
-        <button
-            type="button"
-            class="mp-header-show-btn"
-            id="mp-header-show-btn"
-            aria-label="Show header"
-            aria-controls="mp-header-wrap"
-            hidden
-        >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M6 15l6-6 6 6"/>
-            </svg>
-        </button>
+
 
             <!-- Body: picker + stage -->
             <div class="mp-body">
@@ -196,6 +183,22 @@
                             <option value="3">3×</option>
                         </select>
                     </div>
+
+                    <!-- Show-header button: sits just below the sync bar, only visible when header is collapsed -->
+                    <button
+                        type="button"
+                        class="mp-header-show-btn"
+                        id="mp-header-show-btn"
+                        aria-label="Show header"
+                        aria-controls="mp-header-wrap"
+                        hidden
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M6 15l6-6 6 6"/>
+                        </svg>
+                        <span class="mp-header-show-label">Show Header</span>
+                    </button>
 
                     <!-- Empty placeholder: removed from layout when hidden -->
                     <div class="mp-stage-empty" id="mp-stage-empty">
@@ -916,7 +919,7 @@
 
             videoEl.addEventListener('play', () => {
                 refreshPlayPauseIcon(slot);
-                refreshGlobalPlayPauseIcon();
+                refreshGlobalPlayPauseIcon(true); /* play event fires before paused flips on some browsers */
                 /* Wire audio graph on first play (requires user gesture) */
                 resumeAudioCtx();
                 wireAudioGraph(slot);
@@ -926,6 +929,8 @@
                 /* Apply the current global playback speed to this slot */
                 if (speedSelect) videoEl.playbackRate = parseFloat(speedSelect.value) || 1;
             });
+
+
             videoEl.addEventListener('pause', () => { refreshPlayPauseIcon(slot); refreshGlobalPlayPauseIcon(); });
             videoEl.addEventListener('ended', () => { refreshPlayPauseIcon(slot); refreshGlobalPlayPauseIcon(); });
 
