@@ -120,7 +120,7 @@
         >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M6 9l6 6 6-6"/>
+                <path d="M6 15l6-6 6 6"/>
             </svg>
         </button>
 
@@ -183,6 +183,18 @@
                             aria-label="Global sync seek"
                         >
                         <span class="mp-sync-time" id="mp-sync-duration">0:00</span>
+                        <select id="mp-speed-select" class="mp-speed-select" aria-label="Playback speed">
+                            <option value="0.25">0.25×</option>
+                            <option value="0.5">0.5×</option>
+                            <option value="0.75">0.75×</option>
+                            <option value="1" selected>1×</option>
+                            <option value="1.25">1.25×</option>
+                            <option value="1.5">1.5×</option>
+                            <option value="1.75">1.75×</option>
+                            <option value="2">2×</option>
+                            <option value="2.5">2.5×</option>
+                            <option value="3">3×</option>
+                        </select>
                     </div>
 
                     <!-- Empty placeholder: removed from layout when hidden -->
@@ -330,6 +342,7 @@
         const btnClearAll       = document.getElementById('mp-clear-all');
         const btnSeekBack       = document.getElementById('mp-seek-back');
         const btnSeekFwd        = document.getElementById('mp-seek-forward');
+        const speedSelect       = document.getElementById('mp-speed-select');
         const pickerToggle   = document.getElementById('mp-picker-toggle');
         const mpPanelOverlay = document.getElementById('mp-panel-overlay');
         const pickerCloseBtn = document.getElementById('mp-picker-close');
@@ -337,6 +350,34 @@
         const mpHeaderWrap      = document.getElementById('mp-header-wrap');
         const mpHeaderCollapseBtn = document.getElementById('mp-header-collapse-btn');
         const mpHeaderShowBtn   = document.getElementById('mp-header-show-btn');
+
+        /* ── Playback speed ── */
+        const SPEED_KEY = 'vstreamware.mp-playback-speed';
+
+        const applySpeedToAll = (rate) => {
+            const clamped = Math.max(0.1, Math.min(16, Number(rate) || 1));
+            slots.forEach((s) => {
+                if (s.videoEl) s.videoEl.playbackRate = clamped;
+            });
+            if (speedSelect) speedSelect.value = String(clamped);
+            try { window.localStorage.setItem(SPEED_KEY, String(clamped)); } catch (_e) {}
+        };
+
+        /* Restore persisted speed */
+        (() => {
+            try {
+                const raw = window.localStorage.getItem(SPEED_KEY);
+                if (raw && speedSelect) {
+                    const val = String(parseFloat(raw));
+                    const opt = speedSelect.querySelector(`option[value="${val}"]`);
+                    if (opt) speedSelect.value = val;
+                }
+            } catch (_e) {}
+        })();
+
+        if (speedSelect) {
+            speedSelect.addEventListener('change', () => applySpeedToAll(speedSelect.value));
+        }
 
         /* ── Chat panel state ── */
         const CHAT_PANEL_KEY       = 'vstreamware.mp-chat-open';
@@ -875,6 +916,8 @@
                 /* Re-apply stored volume/pan now that graph is wired */
                 applyVolume(slot.id, slot.volume);
                 applyPan(slot.id, slot.pan);
+                /* Apply the current global playback speed to this slot */
+                if (speedSelect) videoEl.playbackRate = parseFloat(speedSelect.value) || 1;
             });
             videoEl.addEventListener('pause', () => { refreshPlayPauseIcon(slot); refreshGlobalPlayPauseIcon(); });
             videoEl.addEventListener('ended', () => { refreshPlayPauseIcon(slot); refreshGlobalPlayPauseIcon(); });

@@ -316,6 +316,36 @@
     accent-color: var(--accent);
 }
 
+.mp-speed-select {
+    padding: 3px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    border-radius: 7px;
+    border: 1px solid var(--panel-border);
+    background: #1e1e1e;
+    color: #e2e8f0;
+    cursor: pointer;
+    flex-shrink: 0;
+    height: 26px;
+    appearance: none;
+    -webkit-appearance: none;
+    text-align: center;
+    min-width: 52px;
+}
+
+.mp-speed-select:hover {
+    border-color: #4f86b4;
+    background: #1e3049;
+}
+
+.mp-speed-select:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(110, 166, 220, 0.38);
+    border-color: #4f86b4;
+}
+
 .mp-sync-actions {
     display: inline-flex;
     align-items: center;
@@ -333,8 +363,8 @@
 
 /* Icon-only square buttons in the sync bar */
 .mp-sync-icon-btn {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     padding: 0;
     border-radius: 7px;
     display: inline-flex;
@@ -344,9 +374,15 @@
 }
 
 .mp-sync-icon-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     display: block;
+    flex-shrink: 0;
+}
+
+/* Ensure the hidden SVG (play/pause toggle) takes no space */
+.mp-sync-icon-btn svg[hidden] {
+    display: none !important;
 }
 
 /* Empty stage placeholder — only shown when no slots exist */
@@ -1397,48 +1433,48 @@ body.is-mp-chat-resizing * {
     transform: rotate(180deg);
 }
 
-/* Ensure the button's hidden attribute is respected but display:flex when shown */
+/* Ensure the button's hidden attribute is respected */
 .mp-header-show-btn[hidden] {
     display: none !important;
 }
 
-/* Floating restore strip — full-width, centred, paper-thin */
+/* Floating restore button — matches the collapse button style exactly,
+   positioned in the top-right corner of .multi-player-page */
 .mp-header-show-btn {
-    display: flex;
+    position: absolute;
+    top: 6px;
+    right: 14px;
+    z-index: 10;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 7px;
+    border: 1px solid var(--panel-border);
+    background: transparent;
+    color: var(--muted);
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    height: 14px;
-    padding: 0;
-    border: none;
-    border-bottom: 1px solid var(--panel-border);
-    background: #1e1e1e;
-    color: var(--muted);
+    flex-shrink: 0;
     cursor: pointer;
     transition: background 0.14s ease, color 0.14s ease;
-    /* not positioned absolute — sits in normal flow between header-wrap and body */
 }
 
 .mp-header-show-btn svg {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     display: block;
-    opacity: 0.6;
-    transition: opacity 0.14s ease;
+    transition: transform 0.22s ease;
 }
 
 .mp-header-show-btn:hover {
-    background: #252525;
+    background: #2e2e2e;
     color: var(--text);
-}
-
-.mp-header-show-btn:hover svg {
-    opacity: 1;
 }
 
 .mp-header-show-btn:focus-visible {
     outline: none;
-    box-shadow: inset 0 0 0 2px rgba(110, 166, 220, 0.38);
+    box-shadow: 0 0 0 2px rgba(110, 166, 220, 0.38);
 }
 
 /* ── Picker collapse (desktop only) ─────────────────────────────────────────── */
