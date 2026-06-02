@@ -1544,8 +1544,8 @@
                 channelBadge = `<span class="mp-chat-channel-badge" style="border-color:${color};color:${color}">${escHtmlChat(channelKey)}</span>`;
             }
             el.innerHTML = `
-                <span class="mp-chat-author" style="color:${color}">${escHtmlChat(msg.author)}</span>
                 ${channelBadge}
+                <span class="mp-chat-author" style="color:${msg.color || color}">${escHtmlChat(msg.author)}</span>
                 <span class="mp-chat-colon" aria-hidden="true">:</span>
                 <span class="mp-chat-text">${escHtmlChat(msg.text)}</span>
             `;
