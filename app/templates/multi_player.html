@@ -1528,6 +1528,23 @@
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
+        const sanitizeChatColor = (value) => {
+            const raw = String(value ?? '').trim();
+            return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '';
+        };
+
+        const fallbackAuthorColor = (name) => {
+            const source = String(name ?? '').trim().toLowerCase();
+            if (!source) return '#93c5fd';
+            let hash = 0;
+            for (const char of source) {
+                hash = ((hash << 5) - hash) + char.charCodeAt(0);
+                hash |= 0;
+            }
+            const hue = Math.abs(hash) % 360;
+            return `hsl(${hue} 70% 68%)`;
+        };
+
         const fmtChatTime = (utcMs) => {
             if (!utcMs) return '';
             const d = new Date(utcMs);
@@ -1535,17 +1552,19 @@
         };
 
         const buildChatMessageEl = (msg, channelKey, showChannel) => {
-            const color = getChannelColor(channelKey);
+            const channelColor = getChannelColor(channelKey);
+            const tags = (msg.tags && typeof msg.tags === 'object') ? msg.tags : {};
+            const authorColor = sanitizeChatColor(tags.color) || fallbackAuthorColor(msg.author);
             const el = document.createElement('div');
             el.className = 'mp-chat-item';
             el.dataset.utcMs = String(msg.utc_ms);
             let channelBadge = '';
             if (showChannel) {
-                channelBadge = `<span class="mp-chat-channel-badge" style="border-color:${color};color:${color}">${escHtmlChat(channelKey)}</span>`;
+                channelBadge = `<span class="mp-chat-channel-badge" style="border-color:${channelColor};color:${channelColor}">${escHtmlChat(channelKey)}</span>`;
             }
             el.innerHTML = `
                 ${channelBadge}
-                <span class="mp-chat-author" style="color:${msg.color || color}">${escHtmlChat(msg.author)}</span>
+                <span class="mp-chat-author" style="color:${authorColor}">${escHtmlChat(msg.author)}</span>
                 <span class="mp-chat-colon" aria-hidden="true">:</span>
                 <span class="mp-chat-text">${escHtmlChat(msg.text)}</span>
             `;
