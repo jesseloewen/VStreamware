@@ -888,6 +888,13 @@
                 if (overlay) overlay.classList.add('is-hidden');
                 updateSyncBarDuration();
 
+                /* Auto-start when this is the first (and only) slot added */
+                if (slots.length === 1) {
+                    videoEl.play().catch(() => {});
+                    startSyncTimer();
+                    return;
+                }
+
                 /* If any other slot is already playing, seek this one to its
                    synced position and join playback immediately */
                 const slotIdx = slots.indexOf(slot);
@@ -1031,9 +1038,9 @@
         /* ── Play / Pause all ── */
         const isAnyPlaying = () => slots.some((s) => s.videoEl && !s.videoEl.paused);
 
-        const refreshGlobalPlayPauseIcon = () => {
+        const refreshGlobalPlayPauseIcon = (forcePlaying) => {
             if (!btnPlayPauseAll) return;
-            const playing = isAnyPlaying();
+            const playing = forcePlaying !== undefined ? Boolean(forcePlaying) : isAnyPlaying();
             const playIcon  = btnPlayPauseAll.querySelector('.mp-icon-play');
             const pauseIcon = btnPlayPauseAll.querySelector('.mp-icon-pause');
             if (playIcon)  playIcon.hidden  = playing;
@@ -1045,7 +1052,7 @@
             slots.forEach((s) => { if (s.videoEl && s.videoEl.paused) s.videoEl.play().catch(() => {}); });
             startSyncTimer();
             setSyncStatus('Playing.', 'synced');
-            refreshGlobalPlayPauseIcon();
+            refreshGlobalPlayPauseIcon(true); /* optimistic: .play() is async so isAnyPlaying() would still read false */
         };
 
         const pauseAll = () => {
