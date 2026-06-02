@@ -73,20 +73,6 @@
                     <button type="button" id="mp-clear-all" class="danger" aria-label="Remove all videos from the player">Clear All</button>
                 </div>
                 <span class="mp-sync-status" id="mp-sync-status" aria-live="polite"></span>
-                <!-- Header collapse button — rightmost in toolbar -->
-                <button
-                    type="button"
-                    class="mp-header-collapse-btn"
-                    id="mp-header-collapse-btn"
-                    aria-label="Collapse header"
-                    aria-controls="mp-header-wrap"
-                >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M6 9l6 6 6-6"/>
-                    </svg>
-                </button>
-
                 <!-- Chat panel toggle (rightmost in toolbar) -->
                 <button
                     type="button"
@@ -107,9 +93,40 @@
                 </button>
             </div>
 
+            <!-- Collapse-header bar — full-width strip at the bottom of the header -->
+            <button
+                type="button"
+                class="mp-header-collapse-btn"
+                id="mp-header-collapse-btn"
+                aria-label="Collapse header"
+                aria-controls="mp-header-wrap"
+            >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M6 9l6 6 6-6"/>
+                </svg>
+                <span class="mp-header-collapse-label">Hide Header</span>
+            </button>
+
         </div><!-- /.mp-header-wrap -->
 
 
+
+            <!-- Show-header bar — full-width strip above the body, only visible when header is collapsed -->
+            <button
+                type="button"
+                class="mp-header-show-btn"
+                id="mp-header-show-btn"
+                aria-label="Show header"
+                aria-controls="mp-header-wrap"
+                hidden
+            >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M6 15l6-6 6 6"/>
+                </svg>
+                <span class="mp-header-show-label">Show Header</span>
+            </button>
 
             <!-- Body: picker + stage -->
             <div class="mp-body">
@@ -183,22 +200,6 @@
                             <option value="3">3×</option>
                         </select>
                     </div>
-
-                    <!-- Show-header button: sits just below the sync bar, only visible when header is collapsed -->
-                    <button
-                        type="button"
-                        class="mp-header-show-btn"
-                        id="mp-header-show-btn"
-                        aria-label="Show header"
-                        aria-controls="mp-header-wrap"
-                        hidden
-                    >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M6 15l6-6 6 6"/>
-                        </svg>
-                        <span class="mp-header-show-label">Show Header</span>
-                    </button>
 
                     <!-- Empty placeholder: removed from layout when hidden -->
                     <div class="mp-stage-empty" id="mp-stage-empty">
@@ -482,13 +483,8 @@
         const setHeaderCollapsed = (collapsed, persist = true) => {
             if (!mpPage) return;
             mpPage.classList.toggle(HEADER_COLLAPSE_CLASS, Boolean(collapsed));
-            /* Show/hide the floating restore button */
+            /* Show/hide the restore bar above the body */
             if (mpHeaderShowBtn) mpHeaderShowBtn.hidden = !collapsed;
-            /* Update aria-expanded on the collapse button */
-            if (mpHeaderCollapseBtn) {
-                mpHeaderCollapseBtn.setAttribute('aria-label',
-                    collapsed ? 'Expand header' : 'Collapse header');
-            }
             if (persist) {
                 try { window.localStorage.setItem(HEADER_COLLAPSE_KEY, collapsed ? '1' : '0'); }
                 catch (_e) {}

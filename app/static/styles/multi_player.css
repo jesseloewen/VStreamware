@@ -841,6 +841,7 @@
     height: 30px;
     border-radius: 8px;
     padding: 0;
+    margin-left: auto; /* push chat toggle to right edge now that collapse btn is no longer in toolbar */
 }
 
 /* When chat is open give it an accent */
@@ -1386,66 +1387,14 @@ body.is-mp-chat-resizing * {
     max-height: 0;
 }
 
-/* When header is collapsed the show-btn strip acts as the separator;
-   restore rounded top corners on the body below it */
-.mp-header-collapsed .mp-body {
-    border-radius: 0 0 10px 10px;
-}
-
-/* Collapse toggle button — sits inside the toolbar at the far right */
+/* Shared styles for both the collapse and show-header full-width bar buttons */
 .mp-header-collapse-btn,
-.mp-toolbar .mp-header-collapse-btn {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border-radius: 7px;
-    border: 1px solid var(--panel-border);
-    background: transparent;
-    color: var(--muted);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    margin-left: auto;  /* push collapse btn + chat toggle to right edge */
-    cursor: pointer;
-    transition: background 0.14s ease, color 0.14s ease;
-}
-
-.mp-header-collapse-btn svg {
-    width: 16px;
-    height: 16px;
-    display: block;
-    transition: transform 0.22s ease;
-}
-
-.mp-header-collapse-btn:hover {
-    background: #2e2e2e;
-    color: var(--text);
-}
-
-.mp-header-collapse-btn:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(110, 166, 220, 0.38);
-}
-
-/* Rotate chevron-down → chevron-up when header is collapsed */
-.mp-header-collapsed .mp-header-collapse-btn svg {
-    transform: rotate(180deg);
-}
-
-/* Ensure the button's hidden attribute is respected */
-.mp-header-show-btn[hidden] {
-    display: none !important;
-}
-
-/* Show-header button — slim bar spanning the top of the stage,
-   sits just below the sync bar in normal flow (no overlap) */
 .mp-header-show-btn {
     width: 100%;
     height: 22px;
     padding: 0 12px;
     border: none;
-    border-bottom: 1px solid var(--panel-border);
+    border-top: 1px solid var(--panel-border);
     background: #1a1a1a;
     color: var(--muted);
     display: inline-flex;
@@ -1457,8 +1406,25 @@ body.is-mp-chat-resizing * {
     font-size: 11px;
     font-weight: 600;
     transition: background 0.14s ease, color 0.14s ease;
+    /* reset any inherited button styles */
+    border-radius: 0;
+    margin: 0;
 }
 
+/* The collapse btn is at the bottom of the header — give it a bottom border too
+   so it acts as a separator between header and body */
+.mp-header-collapse-btn {
+    border-top: 1px solid var(--panel-border);
+    border-bottom: 1px solid var(--panel-border);
+}
+
+/* The show-header btn is above the body — bottom border acts as the separator */
+.mp-header-show-btn {
+    border-top: none;
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.mp-header-collapse-btn svg,
 .mp-header-show-btn svg {
     width: 13px;
     height: 13px;
@@ -1466,20 +1432,29 @@ body.is-mp-chat-resizing * {
     flex-shrink: 0;
 }
 
+.mp-header-collapse-label,
 .mp-header-show-label {
     font-size: 11px;
     font-weight: 600;
     white-space: nowrap;
 }
 
+.mp-header-collapse-btn:hover,
 .mp-header-show-btn:hover {
     background: #242424;
     color: var(--text);
 }
 
+.mp-header-collapse-btn:focus-visible,
 .mp-header-show-btn:focus-visible {
     outline: none;
     box-shadow: inset 0 0 0 2px rgba(110, 166, 220, 0.38);
+}
+
+/* Ensure the hidden attribute is respected on both */
+.mp-header-collapse-btn[hidden],
+.mp-header-show-btn[hidden] {
+    display: none !important;
 }
 
 /* ── Picker collapse (desktop only) ─────────────────────────────────────────── */
