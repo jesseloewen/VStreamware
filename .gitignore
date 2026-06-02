@@ -10,3 +10,4 @@ recordings/
 recording_settings.json
 .cache/
 data/
+pull-reload.ps1
