@@ -230,8 +230,14 @@ class AutoRecorder:
 
                     is_manual_stop_suppressed = self._is_manual_stop_suppressed(channel)
                     if auto_record and is_live and not is_recording and not is_manual_stop_suppressed:
+                        channel_quality: str | None = None
+                        if saved_item is not None:
+                            raw_quality = saved_item.get("quality")
+                            if isinstance(raw_quality, str) and raw_quality.strip():
+                                channel_quality = raw_quality.strip()
                         self._recording_manager.start_recording(
                             channel,
+                            quality=channel_quality,
                         )
 
                 with self._lock:

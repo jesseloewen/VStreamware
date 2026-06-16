@@ -117,10 +117,14 @@ def build_saved_channels_status(
             last_recording_at=last_recording_at,
         )
 
+        channel_quality = item.get("quality")
+        quality: str | None = channel_quality if isinstance(channel_quality, str) and channel_quality.strip() else None
+
         rows.append(
             {
                 "name": channel,
                 "auto_record": auto_record,
+                "quality": quality,
                 "notifications": dict(item.get("notifications", {})),
                 "is_live": is_live,
                 "live_state": live_state,

@@ -2456,6 +2456,16 @@ def set_display_timezone() -> object:
     return _redirect_back()
 
 
+@dashboard_bp.post("/channels/quality")
+def set_channel_quality() -> object:
+    services = get_services(current_app)
+    channel = request.form.get("channel", "")
+    quality = request.form.get("quality", "").strip() or None
+    ok, message = services["settings_store"].set_channel_quality(channel, quality)
+    flash(message, "success" if ok else "error")
+    return _redirect_back()
+
+
 @dashboard_bp.post("/channels/notifications")
 def set_channel_notifications() -> object:
     services = get_services(current_app)
@@ -2482,12 +2492,25 @@ def test_notifications() -> object:
 def start_recording() -> object:
     services = get_services(current_app)
     channel = request.form.get("channel", "")
-    if not services["settings_store"].is_saved_channel(channel):
+    settings_store = services["settings_store"]
+    if not settings_store.is_saved_channel(channel):
         flash("Only saved channels can be recorded.", "error")
         return _redirect_back()
 
+    # Use the per-channel quality override if one is saved.
+    settings = settings_store.get_settings()
+    channel_quality: str | None = None
+    normalized_channel = channel.strip().lower().lstrip("@")
+    for saved_item in settings["saved_channels"]:
+        if str(saved_item["name"]) == normalized_channel:
+            raw_quality = saved_item.get("quality")
+            if isinstance(raw_quality, str) and raw_quality.strip():
+                channel_quality = raw_quality.strip()
+            break
+
     ok, message = services["recording_manager"].start_recording(
         channel,
+        quality=channel_quality,
     )
     if ok:
         services["auto_recorder"].clear_manual_stop_suppression(channel)

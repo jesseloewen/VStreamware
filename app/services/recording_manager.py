@@ -216,13 +216,12 @@ class RecordingManager:
 
         url = f"https://twitch.tv/{normalized}"
 
-        # Live detection should not depend on an exact quality being available.
-        probe_qualities = ["best"]
-        requested_quality = (quality or "").strip().lower()
-        if requested_quality in {"best", "worst"} and requested_quality not in probe_qualities:
-            probe_qualities.append(requested_quality)
+        # Use a fallback chain so source-only streams (low viewer count, no
+        # Twitch transcoding) are still detected even when a specific quality
+        # like "720p60" is not available.
+        probe_quality = "best,worst"
 
-        for probe_quality in probe_qualities:
+        for _attempt in [probe_quality]:
             args = [
                 "--json",
                 url,
@@ -287,11 +286,15 @@ class RecordingManager:
                     now=start_time,
                 )
                 url = f"https://twitch.tv/{normalized}"
+                # Append "best,worst" fallbacks so streamlink can still
+                # record source-only streams (low-viewer Twitch channels
+                # that have no transcoded quality variants).
+                quality_with_fallback = f"{stream_quality},best,worst"
                 args = [
                     "--output",
                     str(output_file),
                     url,
-                    stream_quality,
+                    quality_with_fallback,
                 ]
 
                 for command in self._streamlink_commands(args):

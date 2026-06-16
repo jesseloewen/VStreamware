@@ -193,6 +193,37 @@ body.panel-open {
     gap: 10px;
 }
 
+.saved-quality-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: #232323;
+}
+
+.saved-quality-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.saved-quality-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 13px;
+}
+
+.saved-quality-row button {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
 .saved-inline-row {
     display: flex;
     align-items: center;

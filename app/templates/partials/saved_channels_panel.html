@@ -48,6 +48,22 @@
                                 <p class="muted">Title: {{ item.stream_title }}</p>
                             {% endif %}
                             <div class="saved-controls">
+                                <form action="{{ url_for('dashboard.set_channel_quality') }}" method="post" class="saved-quality-row">
+                                    <input type="hidden" name="channel" value="{{ item.name }}">
+                                    <label class="saved-quality-label" for="quality-{{ item.name }}">Quality</label>
+                                    <input
+                                        id="quality-{{ item.name }}"
+                                        class="saved-quality-input"
+                                        type="text"
+                                        name="quality"
+                                        value="{{ item.quality if item.quality else '' }}"
+                                        placeholder="global default"
+                                        aria-label="Stream quality for {{ item.name }}"
+                                        autocomplete="off"
+                                        spellcheck="false"
+                                    >
+                                    <button type="submit" class="secondary">Set</button>
+                                </form>
                                 <div class="saved-inline-row">
                                     <form action="{{ url_for('dashboard.set_channel_auto_recording') }}" method="post" class="saved-auto-row">
                                         <input type="hidden" name="channel" value="{{ item.name }}">

@@ -81,6 +81,14 @@ class SettingsStore:
         return True, normalized, ""
 
     @staticmethod
+    def _normalize_quality(value: Any) -> str | None:
+        """Return a stripped quality string, or None to use the global default."""
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip()
+        return normalized if normalized else None
+
+    @staticmethod
     def _normalize_saved_channel(
         value: Any,
         default_auto_record: bool,
@@ -92,6 +100,7 @@ class SettingsStore:
             return {
                 "name": name,
                 "auto_record": default_auto_record,
+                "quality": None,
                 "notifications": SettingsStore._default_notifications(),
             }
 
@@ -110,6 +119,7 @@ class SettingsStore:
         return {
             "name": name,
             "auto_record": auto_record,
+            "quality": SettingsStore._normalize_quality(value.get("quality")),
             "notifications": SettingsStore._normalize_notifications(value.get("notifications")),
         }
 
@@ -119,6 +129,7 @@ class SettingsStore:
             {
                 "name": str(item["name"]),
                 "auto_record": bool(item["auto_record"]),
+                "quality": SettingsStore._normalize_quality(item.get("quality")),
                 "notifications": SettingsStore._normalize_notifications(item.get("notifications")),
             }
             for item in saved_channels
@@ -211,6 +222,7 @@ class SettingsStore:
                 {
                     "name": normalized,
                     "auto_record": False,
+                    "quality": None,
                     "notifications": self._default_notifications(),
                 }
             )
@@ -244,6 +256,25 @@ class SettingsStore:
                     self._save_settings()
                     state = "enabled" if enabled else "disabled"
                     return True, f"Auto record {state} for {normalized}."
+
+            return False, f"{normalized} is not in the channel list."
+
+    def set_channel_quality(self, channel: str, quality: str | None) -> tuple[bool, str]:
+        normalized = self._normalize_channel(channel)
+        if not normalized:
+            return False, "Channel name is required."
+
+        normalized_quality = self._normalize_quality(quality)
+
+        with self._lock:
+            saved_channels: list[dict[str, Any]] = self._settings["saved_channels"]
+            for item in saved_channels:
+                if str(item["name"]) == normalized:
+                    item["quality"] = normalized_quality
+                    self._save_settings()
+                    if normalized_quality:
+                        return True, f"Quality set to '{normalized_quality}' for {normalized}."
+                    return True, f"Quality reset to global default for {normalized}."
 
             return False, f"{normalized} is not in the channel list."
 
