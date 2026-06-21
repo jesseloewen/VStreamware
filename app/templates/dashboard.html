@@ -155,8 +155,6 @@
                                             <input type="checkbox" name="recording_stopped" value="true" {% if item.notifications.recording_stopped %}checked{% endif %}>
                                             Recording Stop
                                         </label>
-
-                                        <button type="submit" class="secondary">Save</button>
                                     </form>
                                 </article>
                             {% endfor %}
@@ -472,6 +470,32 @@
 
             syncDashboardState();
             startPolling();
+        })();
+    </script>
+    <script>
+        (() => {
+            const notificationForms = document.querySelectorAll('.notification-form');
+            for (const form of notificationForms) {
+                form.addEventListener('change', async (event) => {
+                    if (!(event.target instanceof HTMLInputElement)) return;
+                    const formData = new FormData(form);
+                    // Unchecked checkboxes are omitted from FormData; ensure all four keys are present.
+                    for (const key of ['stream_live', 'stream_end', 'recording_started', 'recording_stopped']) {
+                        if (!formData.has(key)) {
+                            formData.set(key, 'false');
+                        }
+                    }
+                    try {
+                        await fetch(form.action, {
+                            method: 'POST',
+                            body: formData,
+                            cache: 'no-store',
+                        });
+                    } catch (_err) {
+                        // Silently ignore network errors; the checkbox state reflects intent.
+                    }
+                });
+            }
         })();
     </script>
 </body>

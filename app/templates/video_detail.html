@@ -2147,13 +2147,11 @@
                 if (hideControlsTimer) window.clearTimeout(hideControlsTimer);
                 if (videoPlayerWrap) videoPlayerWrap.classList.remove('is-idle');
                 updateFullscreenOverlayChatMetrics();
-                if (isPlayerFullscreen()) {
-                    hideControlsTimer = window.setTimeout(() => {
-                        if (!videoPlayerWrap.classList.contains('is-playing') || isSpeedMenuOpen || isVolumeMenuOpen) return;
-                        videoPlayerWrap.classList.add('is-idle');
-                        updateFullscreenOverlayChatMetrics();
-                    }, 2500);
-                }
+                hideControlsTimer = window.setTimeout(() => {
+                    if (!videoPlayerWrap.classList.contains('is-playing') || isSpeedMenuOpen || isVolumeMenuOpen) return;
+                    videoPlayerWrap.classList.add('is-idle');
+                    updateFullscreenOverlayChatMetrics();
+                }, 2500);
             };
 
             const resetTouchTapState = () => {

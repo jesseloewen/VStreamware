@@ -310,14 +310,15 @@
     backdrop-filter: blur(2px);
 }
 
-.video-detail-content:not(.is-player-fullscreen) .video-side-nav-button,
-.video-detail-content:not(:fullscreen) .video-side-nav-button {
-    display: none;
+.video-side-nav-button {
+    display: inline-flex;
+    opacity: 1;
+    transition: opacity 0.3s ease;
 }
 
-.video-detail-content.is-player-fullscreen .video-side-nav-button,
-.video-detail-content:fullscreen .video-side-nav-button {
-    display: inline-flex;
+.video-detail-player-wrap.is-idle .video-side-nav-button {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .video-side-nav-button.is-prev {
@@ -486,7 +487,7 @@
     box-shadow: 0 0 0 2px rgba(110, 166, 220, 0.4);
 }
 
-.video-detail-player-wrap.is-playing .video-player-center-toggle {
+.video-detail-player-wrap.is-idle .video-player-center-toggle {
     opacity: 0;
     pointer-events: none;
     transform: translate(-50%, calc(-50% + 8px));
