@@ -223,11 +223,6 @@ class AutoRecorder:
                             event
                         )
 
-                    stream_info["last_live_at"] = last_live_at
-                    stream_info["recording_started_at"] = recording_started_at
-                    stream_info["last_recording_at"] = last_recording_at
-                    next_live_states[channel] = stream_info
-
                     is_manual_stop_suppressed = self._is_manual_stop_suppressed(channel)
                     if auto_record and is_live and not is_recording and not is_manual_stop_suppressed:
                         channel_quality: str | None = None
@@ -239,6 +234,19 @@ class AutoRecorder:
                             channel,
                             quality=channel_quality,
                         )
+
+                    if auto_record and not stream_is_live and channel in active_recording_channels:
+                        self._recording_manager.stop_recording(channel)
+                        self._emit_stream_event({
+                            "event": "stream_end",
+                            "channel": channel,
+                        })
+                        stream_info["is_live"] = False
+
+                    stream_info["last_live_at"] = last_live_at
+                    stream_info["recording_started_at"] = recording_started_at
+                    stream_info["last_recording_at"] = last_recording_at
+                    next_live_states[channel] = stream_info
 
                 with self._lock:
                     self._channel_live_states = next_live_states
